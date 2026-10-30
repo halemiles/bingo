@@ -2,9 +2,12 @@ import { test, expect } from '@playwright/test';
 import { open, openWithGame, sequenceStartingWith, ui, SPEED_KEY } from './helpers.js';
 
 // Playwright's fake clock means these run instantly instead of waiting
-// real seconds between balls.
+// real seconds between balls. An installed clock still ticks in real time
+// until paused, so pause it: time then only moves via runFor().
 test.beforeEach(async ({ page }) => {
-  await page.clock.install();
+  const start = new Date('2026-01-01T19:00:00Z');
+  await page.clock.install({ time: start });
+  await page.clock.pauseAt(new Date(start.getTime() + 1000));
 });
 
 test('auto mode draws a ball every interval until paused', async ({ page }) => {
