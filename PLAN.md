@@ -2,6 +2,8 @@
 
 A self-hosted, browser-based 90-ball bingo caller. A human reads the numbers out; the app draws them, displays them clearly, and keeps track of what's been called.
 
+The caller is a child, so the current ball's text needs to be easy to read aloud, and the house "bingo calls" (e.g. "Two fat ladies 88") are shown alongside the number.
+
 ## Goals
 
 - Draw numbers 1–90 with no repeats, fairly (cryptographically random).
@@ -9,7 +11,7 @@ A self-hosted, browser-based 90-ball bingo caller. A human reads the numbers out
   - **Manual** — press **Release ball** to draw the next number.
   - **Auto** — draws a ball every N seconds, with an adjustable speed and pause/resume.
 - Display:
-  - **Current ball** — large and prominent, readable from across a room.
+  - **Current ball** — large and prominent, readable from across a room, with its bingo call underneath when it has one.
   - **Last 3 balls** — the three called before the current one (4 balls on screen in total).
   - **Board** — all 90 numbers in a grid; called numbers highlighted green.
 - Runs entirely in the browser, self-hosted, no accounts, no external calls.
@@ -32,9 +34,13 @@ bingo/
 │   ├── index.html
 │   ├── styles.css
 │   ├── app.js          # UI wiring: DOM, timers, buttons, keyboard
-│   └── game.js         # Pure game logic, no DOM — unit-testable
+│   ├── game.js         # Pure game logic, no DOM — unit-testable
+│   ├── calls.js        # Loads + validates calls.json, looks up a number's call
+│   ├── calls.json      # The house bingo calls, editable
+│   └── fonts/          # Self-hosted reading font (no CDN)
 ├── tests/
 │   ├── game.test.js    # Unit tests (node:test, zero deps)
+│   ├── calls.test.js
 │   └── e2e/            # Playwright specs
 ├── Dockerfile          # nginx-unprivileged serving public/
 ├── compose.yaml
@@ -61,6 +67,27 @@ state = {
 
 Shuffling up front (rather than picking randomly per draw) makes the game a deterministic replay of one list, which keeps undo and persistence simple.
 
+### Bingo calls (`calls.json`)
+
+A plain map of number → the exact phrase to read out. Only numbers with a call are listed; everything else just shows the number.
+
+```json
+{
+  "4":  "Number 4 on his own",
+  "11": "Legs 11",
+  "22": "Two ducks 22",
+  "69": "Brighton line 69",
+  "88": "Two fat ladies 88"
+}
+```
+
+- The phrase is stored **exactly as it's read aloud**, number included, rather than built from a template. "Number 4 on his own" and "Legs 11" put the number in different places, and a child reading it shouldn't have to do any assembly. What's on screen is what gets said.
+- Seeded with the house calls above. Adding one is a one-line edit to the file in Git.
+- `compose.yaml` bind-mounts `./calls.json` read-only over the bundled copy, so a new call goes live with a browser refresh, with no rebuild. Without the mount, the bundled file is used.
+- `calls.js` validates on load: keys must be whole numbers 1–90 and values non-empty strings. Bad entries are skipped with a console warning rather than breaking the game. A missing or malformed file means "no calls", and the game still works.
+- Calls are rendered with `textContent`, never `innerHTML`, so an edited file can't inject markup.
+- When voice is added later, the same phrases feed straight into speech.
+
 ### Persistence & recovery
 
 State is saved to `localStorage` after every change. A page refresh, browser crash or accidental tab close mid-game restores exactly where you were. Auto mode always resumes **paused** after a reload so it never fires balls before the caller is ready.
@@ -75,15 +102,21 @@ State is saved to `localStorage` after every change. A page refresh, browser cra
 - In fullscreen, the mouse cursor hides after a few seconds idle.
 - Controls stay visible but visually quiet so the numbers dominate the TV.
 
+**Readable for a child caller:**
+
+- The call phrase sits directly under the current ball in large text, so it can be read off the laptop screen or the TV.
+- Font: [Atkinson Hyperlegible](https://www.brailleinstitute.org/freefont/), designed for legibility (distinct letterforms, unambiguous digits like 6/9 and 1/7). It's under the Open Font License and bundled in `public/fonts/`, so there are no third-party font requests.
+- Manual mode lets the caller go at their own pace: one press of `Space` per ball. Calls take longer to read than bare numbers, so in Auto mode the slider may want to sit a little higher than 5 s.
+
 Layout:
 
 ```
 ┌───────────────────────────────┬─────────────────────────────┐
 │                               │  1  2  3  4  5  6  7  8  9 10│
-│          ( 47 )               │ 11 12 13 14 15 16 17 18 19 20│
-│       current ball            │ 21 ...                       │
+│          ( 88 )               │ 11 12 13 14 15 16 17 18 19 20│
+│     "Two fat ladies 88"       │ 21 ...                       │
 │                               │ ...                          │
-│   ( 12 )  ( 88 )  ( 3 )       │ 81 82 83 84 85 86 87 88 89 90│
+│   ( 12 )  ( 47 )  ( 3 )       │ 81 82 83 84 85 86 87 88 89 90│
 │        last 3 balls           │                              │
 ├───────────────────────────────┴─────────────────────────────┤
 │ [Release ball]  [▶ Auto]  speed: ──●── 5s   [Undo] [New game]│
@@ -122,26 +155,27 @@ environment:
 - `nginxinc/nginx-unprivileged:alpine` image, copying `public/` in.
 - `compose.yaml` with `read_only: true`, `cap_drop: [ALL]`, `no-new-privileges`, healthcheck, restart policy.
 - `nginx.conf` sets a strict CSP (`default-src 'self'`), `X-Content-Type-Options`, `Referrer-Policy`, and no-cache on `index.html`.
-- No volumes and no data to back up — the image *is* the deployment. Recovery = `docker compose up -d`.
+- No game data to back up. The only mount is `calls.json` (read-only, and it lives in Git). Recovery = `git clone` + `docker compose up -d`.
 - Also works with zero infrastructure: open `public/index.html` via any static server (`python3 -m http.server`).
 
 ## Testing
 
-- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn).
-- **E2E** (Playwright): release ball updates main ball, last-3 and board; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; custom speed range from `config.json`; fallback when it is missing; undo; new game confirmation; state survives reload; game ends cleanly at 90.
+- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
+- **E2E** (Playwright): release ball updates main ball, last-3 and board; a ball with a call shows its phrase, a ball without one shows none (using a seeded sequence so the test knows which ball comes next); a missing `calls.json` doesn't break the game; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; custom speed range from `config.json`; fallback when it is missing; undo; new game confirmation; state survives reload; game ends cleanly at 90.
 - **CI**: GitHub Actions running unit + Playwright, plus building the Docker image.
 
 ## Delivery phases
 
-1. **Core** — `game.js` + unit tests.
-2. **UI** — layout, manual release, board highlighting, last 3, persistence.
+1. **Core** — `game.js`, `calls.js` + unit tests.
+2. **UI** — layout, manual release, call phrase under the current ball, board highlighting, last 3, persistence, bundled font.
 3. **Auto mode** — timer, speed slider, countdown, pause/resume, `config.json` loading with fallback defaults.
 4. **Polish** — undo, new game confirm, keyboard shortcuts, fullscreen, animations.
 5. **Ship** — Dockerfile, compose, config entrypoint script, nginx hardening, Playwright suite, CI.
 
 ## Future ideas
 
-- Voice calling via the browser's built-in Web Speech API (local, no cloud), optionally with traditional calls ("Legs eleven", "Two fat ladies").
+- Voice calling via the browser's built-in Web Speech API (local, no cloud), reading the phrases from `calls.json`.
+- An in-app editor for calls, so the caller can add new ones themselves. It would need somewhere to save them: `localStorage` for one browser, or a small backend for anything shared.
 - Separate **caller** and **display** views — same machine via `BroadcastChannel` (no backend), or across devices via a tiny WebSocket server.
 - Game history / export of the called sequence (useful for verifying a disputed claim).
 - "Check a ticket" helper: type in a player's numbers and see which are called.
@@ -151,3 +185,4 @@ environment:
 - **Ball display:** current ball plus the three before it (4 in total).
 - **Primary display:** a TV driven by a laptop over HDMI.
 - **Auto speed:** 3–15 s, default 5 s, configurable through env vars.
+- **Caller:** a child reads the numbers aloud; the house calls are shown under the current ball, stored as editable data in `calls.json`.
