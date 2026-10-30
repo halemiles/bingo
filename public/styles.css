@@ -1,0 +1,490 @@
+/* Designed for a 16:9 TV read from across a room. Sizes are relative to the
+   viewport or to their container, so it scales to whatever resolution the
+   laptop sends over HDMI. */
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('fonts/atkinson-hyperlegible-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('fonts/atkinson-hyperlegible-latin-700-normal.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg: #10121a;
+  --surface: #1b1e2a;
+  --surface-raised: #262a3a;
+  --text: #f4f5fa;
+  --text-dim: #8a90a8;
+  --text-faint: #545a70;
+  --accent: #ffd23f;
+  --called: #1fa463;
+  --called-text: #ffffff;
+  --danger: #e5484d;
+  --focus: #7cc4ff;
+
+  /* Ball colours by decade (1–9, 10–19, … 80–90), like printed bingo balls. */
+  --decade-0: #e5484d;
+  --decade-1: #f76b15;
+  --decade-2: #f5b400;
+  --decade-3: #30a46c;
+  --decade-4: #12a594;
+  --decade-5: #0090ff;
+  --decade-6: #6e56cf;
+  --decade-7: #ab4aba;
+  --decade-8: #e93d82;
+
+  /* Keep content clear of TV overscan. */
+  --safe-y: 3vh;
+  --safe-x: 3vw;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 2.5vh;
+  height: 100vh;
+  height: 100dvh;
+  padding: var(--safe-y) var(--safe-x);
+  overflow: hidden;
+  background: radial-gradient(ellipse at 25% 40%, #1a1e2e 0%, var(--bg) 70%);
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  font-size: clamp(14px, 2.1vh, 28px);
+}
+
+body.cursor-hidden,
+body.cursor-hidden * {
+  cursor: none !important;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Layout ---------- */
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 3vw;
+  min-height: 0;
+}
+
+.balls {
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  min-height: 0;
+}
+
+.current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2cqh;
+  width: 100%;
+}
+
+.board-wrap {
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+/* ---------- Balls ---------- */
+
+.ball {
+  --size: 10vh;
+  --ball-color: var(--surface-raised);
+  display: grid;
+  place-items: center;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.45) 0%, transparent 38%),
+    radial-gradient(circle at 50% 50%, var(--ball-color) 55%, color-mix(in srgb, var(--ball-color), #000 45%) 100%);
+  box-shadow: 0 calc(var(--size) * 0.06) calc(var(--size) * 0.14) rgb(0 0 0 / 0.5);
+}
+
+.ball__face {
+  display: grid;
+  place-items: center;
+  width: 64%;
+  height: 64%;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 calc(var(--size) * -0.02) calc(var(--size) * 0.04) rgb(0 0 0 / 0.18);
+}
+
+.ball__number {
+  color: #14161f;
+  font-weight: 700;
+  font-size: calc(var(--size) * 0.34);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.ball[data-decade='0'] { --ball-color: var(--decade-0); }
+.ball[data-decade='1'] { --ball-color: var(--decade-1); }
+.ball[data-decade='2'] { --ball-color: var(--decade-2); }
+.ball[data-decade='3'] { --ball-color: var(--decade-3); }
+.ball[data-decade='4'] { --ball-color: var(--decade-4); }
+.ball[data-decade='5'] { --ball-color: var(--decade-5); }
+.ball[data-decade='6'] { --ball-color: var(--decade-6); }
+.ball[data-decade='7'] { --ball-color: var(--decade-7); }
+.ball[data-decade='8'] { --ball-color: var(--decade-8); }
+
+.ball.is-empty {
+  background: transparent;
+  border: calc(var(--size) * 0.025) dashed var(--text-faint);
+  box-shadow: none;
+}
+
+.ball.is-empty .ball__face {
+  background: transparent;
+  box-shadow: none;
+}
+
+.ball.is-empty .ball__number {
+  color: var(--text-faint);
+}
+
+.ball--current {
+  --size: min(50cqh, 78cqw);
+}
+
+.call {
+  min-height: 2.3em;
+  margin: 0;
+  max-width: 100%;
+  color: var(--accent);
+  font-size: min(6.5cqh, 6cqw);
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.call.is-hint {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: min(4.5cqh, 4.5cqw);
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5cqh;
+}
+
+.label {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: min(3.2cqh, 3.5cqw);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recent__list {
+  display: flex;
+  gap: 4cqw;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ball--small {
+  --size: min(17cqh, 22cqw);
+}
+
+/* ---------- Board ---------- */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  gap: min(1cqh, 0.8cqw);
+  width: min(100cqw, 100cqh * 4 / 3);
+  aspect-ratio: 4 / 3;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cell {
+  display: grid;
+  place-items: center;
+  border-radius: 0.4em;
+  background: var(--surface);
+  color: var(--text-faint);
+  font-size: min(5.6cqh, 4.2cqw);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Called cells change fill, text colour and weight, so they don't rely on
+   green alone. */
+.cell.is-called {
+  background: var(--called);
+  color: var(--called-text);
+  font-weight: 700;
+}
+
+.cell.is-latest {
+  outline: 0.18em solid var(--accent);
+  outline-offset: -0.18em;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* ---------- Controls ---------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.2vh 1.4vw;
+  padding: 1.4vh 1.6vw;
+  border-radius: 1.2vh;
+  background: rgb(27 30 42 / 0.75);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.65em 1.1em;
+  border: 1px solid #3a3f55;
+  border-radius: 0.5em;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: #31364a;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #14161f;
+  font-size: 1.15em;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #ffdc66;
+}
+
+.btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.btn--quiet:hover:not(:disabled) {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.btn--danger {
+  border-color: transparent;
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #ef5f63;
+}
+
+.btn[aria-pressed='true'] {
+  border-color: var(--called);
+  background: var(--called);
+  color: #fff;
+}
+
+kbd {
+  padding: 0.1em 0.4em;
+  border: 1px solid currentColor;
+  border-radius: 0.3em;
+  font: inherit;
+  font-size: 0.7em;
+  font-weight: 400;
+  opacity: 0.65;
+}
+
+.speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  color: var(--text-dim);
+}
+
+.speed input {
+  width: 9vw;
+  min-width: 90px;
+  accent-color: var(--accent);
+}
+
+.speed output {
+  min-width: 2.5em;
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown[hidden] {
+  display: none;
+}
+
+.countdown__track {
+  width: 7vw;
+  min-width: 60px;
+  height: 0.5em;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+
+.countdown__bar {
+  width: 100%;
+  height: 100%;
+  background: var(--called);
+  transform-origin: left;
+  transform: scaleX(var(--progress, 0));
+}
+
+.count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Dialog ---------- */
+
+.dialog {
+  max-width: min(40em, 90vw);
+  padding: 2em 2.5em;
+  border: 1px solid #3a3f55;
+  border-radius: 1em;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.2em;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.65);
+}
+
+.dialog__message {
+  margin: 0 0 1.5em;
+  font-size: 1.2em;
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1em;
+}
+
+/* ---------- Motion ---------- */
+
+.pop {
+  animation: pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pop {
+  0% { transform: scale(0.4) rotate(-25deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  50% { outline-color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop,
+  .cell.is-latest {
+    animation: none;
+  }
+}
+
+/* Narrow screens (e.g. setting up on a phone): stack instead of side by side. */
+@media (max-aspect-ratio: 1 / 1) {
+  body {
+    overflow: auto;
+    height: auto;
+  }
+
+  .stage {
+    grid-template-columns: 1fr;
+  }
+
+  .balls {
+    height: 60vh;
+  }
+
+  .board-wrap {
+    height: 60vw;
+  }
+}
