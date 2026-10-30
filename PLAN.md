@@ -10,7 +10,7 @@ A self-hosted, browser-based 90-ball bingo caller. A human reads the numbers out
   - **Auto** — draws a ball every N seconds, with an adjustable speed and pause/resume.
 - Display:
   - **Current ball** — large and prominent, readable from across a room.
-  - **Last 3 balls** — the three called before the current one.
+  - **Last 3 balls** — the three called before the current one (4 balls on screen in total).
   - **Board** — all 90 numbers in a grid; called numbers highlighted green.
 - Runs entirely in the browser, self-hosted, no accounts, no external calls.
 
@@ -67,7 +67,15 @@ State is saved to `localStorage` after every change. A page refresh, browser cra
 
 ### UI (`app.js`)
 
-Layout (landscape, designed for a TV/projector but works on a laptop):
+**Target setup:** a laptop plugged into a TV over HDMI, the caller driving it from the laptop keyboard. Design for 1920×1080 landscape, read from across a room:
+
+- All sizing in viewport units (`vw`/`vh`/`clamp()`), so it scales to whatever resolution the TV negotiates, with no scrolling at 16:9.
+- Dark background, high-contrast numbers, large bold digits. TVs often overscan, so keep a safe margin (~3%) around the edges.
+- **Screen Wake Lock API** keeps the laptop from dimming or sleeping mid-game.
+- In fullscreen, the mouse cursor hides after a few seconds idle.
+- Controls stay visible but visually quiet so the numbers dominate the TV.
+
+Layout:
 
 ```
 ┌───────────────────────────────┬─────────────────────────────┐
@@ -85,12 +93,29 @@ Layout (landscape, designed for a TV/projector but works on a laptop):
 
 - Board is 9 rows × 10 columns (1–10, 11–20, … 81–90), the conventional UK layout.
 - Newly drawn ball gets a brief highlight/animation on both the main ball and the board cell.
-- **Auto mode**: toggle button + speed slider (e.g. 3–15 s, default 5 s). Changing speed takes effect on the next tick. While Auto is running, **Release ball** draws immediately and restarts the countdown. A small countdown indicator shows time to next ball.
+- **Auto mode**: toggle button + speed slider (3–15 s, default 5 s, range configurable — see [Configuration](#configuration)). The chosen speed is remembered between games. Changing speed takes effect on the next tick. While Auto is running, **Release ball** draws immediately and restarts the countdown. A small countdown indicator shows time to next ball.
 - Auto stops automatically when all 90 are drawn.
 - **New game** and **Undo** require confirmation (an accidental "New game" mid-session is the one catastrophic UX failure here).
 - **Keyboard**: `Space` = release ball, `A` = toggle auto, `F` = fullscreen. Useful with a clicker/presenter remote.
 - Fullscreen button (Fullscreen API) for TV use.
 - Accessibility: called state isn't conveyed by colour alone (bold + tick/strike style as well as green); `aria-live` region announces the current ball for screen readers.
+
+## Configuration
+
+The auto speed range is configured declaratively through environment variables in `compose.yaml`, so the settings live in Git alongside the deployment:
+
+```yaml
+environment:
+  AUTO_MIN_SECONDS: 3
+  AUTO_MAX_SECONDS: 15
+  AUTO_DEFAULT_SECONDS: 5
+  AUTO_STEP_SECONDS: 1
+```
+
+- At container start, a small script in `/docker-entrypoint.d/` (a hook the nginx image supports) renders these into `config.json`. The script writes to a tmpfs, so the container stays read-only.
+- `app.js` fetches `config.json` on load. If the file is missing or invalid (for example when served by `python3 -m http.server`), it falls back to the built-in defaults above.
+- Values are validated (numbers only, min ≤ default ≤ max, min ≥ 1 s), and the entrypoint fails fast with a clear error rather than serving a broken config.
+- The slider is the per-session control; the env vars set its bounds and starting point. A speed the caller picks on the slider persists in `localStorage` and wins over the default, clamped to the configured range.
 
 ## Hosting
 
@@ -103,16 +128,16 @@ Layout (landscape, designed for a TV/projector but works on a laptop):
 ## Testing
 
 - **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn).
-- **E2E** (Playwright): release ball updates main ball, last-3 and board; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; undo; new game confirmation; state survives reload; game ends cleanly at 90.
+- **E2E** (Playwright): release ball updates main ball, last-3 and board; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; custom speed range from `config.json`; fallback when it is missing; undo; new game confirmation; state survives reload; game ends cleanly at 90.
 - **CI**: GitHub Actions running unit + Playwright, plus building the Docker image.
 
 ## Delivery phases
 
 1. **Core** — `game.js` + unit tests.
 2. **UI** — layout, manual release, board highlighting, last 3, persistence.
-3. **Auto mode** — timer, speed slider, countdown, pause/resume.
+3. **Auto mode** — timer, speed slider, countdown, pause/resume, `config.json` loading with fallback defaults.
 4. **Polish** — undo, new game confirm, keyboard shortcuts, fullscreen, animations.
-5. **Ship** — Dockerfile, compose, nginx hardening, Playwright suite, CI.
+5. **Ship** — Dockerfile, compose, config entrypoint script, nginx hardening, Playwright suite, CI.
 
 ## Future ideas
 
@@ -121,8 +146,8 @@ Layout (landscape, designed for a TV/projector but works on a laptop):
 - Game history / export of the called sequence (useful for verifying a disputed claim).
 - "Check a ticket" helper: type in a player's numbers and see which are called.
 
-## Open questions
+## Decisions
 
-1. Should **last 3** be the three *before* the current ball (plan assumes this), or include it?
-2. Is this primarily for a TV/projector in a room, or a laptop the caller sits at? Affects sizing defaults.
-3. Auto speed range — is 3–15 s about right?
+- **Ball display:** current ball plus the three before it (4 in total).
+- **Primary display:** a TV driven by a laptop over HDMI.
+- **Auto speed:** 3–15 s, default 5 s, configurable through env vars.
