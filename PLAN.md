@@ -168,8 +168,12 @@ environment:
 
 - **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
 - **E2E** (Playwright): release ball updates main ball, last-3 and board; a ball with a call shows its phrase, a ball without one shows none (using a seeded sequence so the test knows which ball comes next); a missing `calls.json` doesn't break the game; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; custom speed range from `config.json`; fallback when it is missing; undo; new game confirmation; state survives reload; game ends cleanly at 90.
+- **Hardening for the night** (Playwright): holding `Space` releases one ball; Cmd/Ctrl/Alt shortcuts are left to the browser; shortcuts are ignored while a dialog is open; opening a dialog pauses auto; the layout fits at 1920×1080, 1366×768 and 1280×720; fullscreen and cursor hiding; Wake Lock requested on the first ball and re-requested after loss (stubbed); blocked storage and unparseable saves don't break the game; the screen-reader announcement.
+- **Container only** (`BASE_URL` set): security headers, `/healthz`, rendered `config.json`, and no console or CSP errors during play.
+- **Browsers**: every Playwright test runs in Chromium and Firefox, the browser used on the night.
+- **Coverage**: unit tests hold the logic modules at 100% lines (enforced in CI); Playwright covers 100% of `app.js` lines (`npm run test:e2e:coverage`, a zero-dependency V8 coverage report).
 - **Entrypoint** (`node:test` running the script with `sh`): defaults, custom values, leading zeros, and each kind of bad value fails with a clear message.
-- **CI**: GitHub Actions with two jobs. One runs unit + Playwright against the dev server. The other builds the image, checks a bad config stops the container, runs it hardened, and runs the same Playwright suite against it. Actions are pinned to commit SHAs.
+- **CI**: GitHub Actions with two jobs. One runs unit tests with coverage thresholds, then Playwright against the dev server. The other builds the image, checks a bad config stops the container, runs it hardened, and runs the same Playwright suite against it. Actions are pinned to commit SHAs.
 
 ## Delivery phases
 

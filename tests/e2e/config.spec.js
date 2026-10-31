@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { open, openWithGame, sequenceStartingWith, ui } from './helpers.js';
 
 const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });

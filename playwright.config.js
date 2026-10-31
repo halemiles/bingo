@@ -14,7 +14,12 @@ export default defineConfig({
     viewport: { width: 1920, height: 1080 },
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } } }],
+  // Firefox is what drives the TV on the night; Chromium also collects coverage.
+  // Run one with --project=firefox or --project=chromium.
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'], viewport: { width: 1920, height: 1080 } } },
+  ],
   // Set BASE_URL to run the suite against a running container instead.
   webServer: process.env.BASE_URL
     ? undefined

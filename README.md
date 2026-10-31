@@ -74,19 +74,18 @@ Apply with `docker compose up -d`. Values are checked at startup: if they don't 
 
 ```bash
 npm install
+npx playwright install chromium firefox
 npm test
 ```
 
-```bash
-npm run test:unit
-```
+| Command | What it does |
+| --- | --- |
+| `npm run test:unit` | Unit tests (Node's built-in runner, no dependencies) |
+| `npm run test:unit:coverage` | The same, failing below 100% line coverage of `public/` |
+| `npm run test:e2e` | Playwright in Chromium and Firefox, against a small built-in dev server |
+| `npm run test:e2e:coverage` | Playwright in Chromium, then a per-line coverage report of the browser code |
 
-```bash
-npm run test:e2e
-```
-
-- Unit tests use Node's built-in runner, with no dependencies.
-- Playwright runs against a small built-in dev server by default. To run it against a container instead:
+To run the Playwright suite against a running container instead (this also runs the container-only checks for security headers, `/healthz` and `config.json`):
 
 ```bash
 BASE_URL=http://localhost:8080 npm run test:e2e
@@ -107,6 +106,7 @@ docker/
   nginx.conf
   40-bingo-config.sh   Renders env vars into config.json at startup
 scripts/serve.js       Dev server
+scripts/e2e-coverage.js  Line coverage report for the browser code
 tests/unit, tests/e2e
 ```
 
