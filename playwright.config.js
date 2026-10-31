@@ -18,7 +18,24 @@ export default defineConfig({
   // Run one with --project=firefox or --project=chromium.
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'], viewport: { width: 1920, height: 1080 } } },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        viewport: { width: 1920, height: 1080 },
+        launchOptions: {
+          firefoxUserPrefs: {
+            // nginx sends Cross-Origin-Opener-Policy: same-origin, so the first
+            // navigation in each new context (from about:blank) switches
+            // browsing context group. Under Playwright that navigation
+            // sometimes never commits, which stalled 4-14 tests per container
+            // run. Test browser only: the header still ships, and
+            // container.spec.js checks it's sent.
+            'browser.tabs.remote.useCrossOriginOpenerPolicy': false,
+          },
+        },
+      },
+    },
   ],
   // Set BASE_URL to run the suite against a running container instead.
   webServer: process.env.BASE_URL

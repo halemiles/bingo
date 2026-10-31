@@ -14,6 +14,9 @@ test('security headers are sent', async ({ request }) => {
   expect(headers['content-security-policy']).toContain("script-src 'self'");
   expect(headers['x-content-type-options']).toBe('nosniff');
   expect(headers['referrer-policy']).toBe('no-referrer');
+  // Firefox's test profile ignores COOP (see playwright.config.js), so this
+  // is what keeps the header itself covered.
+  expect(headers['cross-origin-opener-policy']).toBe('same-origin');
   expect(headers['cache-control']).toBe('no-cache');
   expect(headers['server']).toBe('nginx'); // no version number
 });
