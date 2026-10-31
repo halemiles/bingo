@@ -42,6 +42,24 @@ for (const viewport of [
     expect(banner.y + banner.height).toBeLessThanOrEqual((await $.cell(1).boundingBox()).y);
   });
 
+  test(`the footer stays on one row with auto running at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    const start = new Date('2026-01-01T19:00:00Z');
+    await page.clock.install({ time: start });
+    await page.clock.pauseAt(new Date(start.getTime() + 1000));
+    await openScenario(page, 'fresh');
+    const $ = ui(page);
+    const footer = page.locator('.controls');
+    const idleHeight = (await footer.boundingBox()).height;
+
+    // The slowest speed has the widest countdown ("15s").
+    await $.speed.fill('15');
+    await $.auto.click();
+    await expect($.countdown).toBeVisible();
+    expect((await footer.boundingBox()).height).toBe(idleHeight);
+    await expectOnScreen([$.auto, $.countdown, $.release, $.newGame], viewport);
+  });
+
   test(`a full game's history fits on a ${viewport.width}x${viewport.height} screen`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await openScenario(page, 'last-ball');

@@ -147,14 +147,14 @@ test.describe('voice in auto mode', () => {
     await $.auto.click();
     await page.clock.runFor(5_000);
     await expect($.currentBall).toHaveText('47');
-    await expect($.countdown).toContainText('Speaking…');
+    await expect($.countdown).toHaveText('🔊');
 
     await page.clock.runFor(3_000);
     await expect($.currentBall).toHaveText('47');
-    await expect($.countdown).toContainText('Speaking…');
+    await expect($.countdown).toHaveText('🔊');
 
     await page.evaluate(() => window.finishSpeaking());
-    await expect($.countdown).toContainText('Next in 5s');
+    await expect($.countdown).toHaveText('5s');
     await page.clock.runFor(5_000);
     await expect($.currentBall).toHaveText('50');
     expect(await spoken(page)).toEqual(['4 and 7, 47', '5 oh, 50']);
@@ -169,9 +169,9 @@ test.describe('voice in auto mode', () => {
     await expect($.currentBall).toHaveText('47');
 
     await page.clock.runFor(7_900);
-    await expect($.countdown).toContainText('Speaking…');
+    await expect($.countdown).toHaveText('🔊');
     await page.clock.runFor(200);
-    await expect($.countdown).toContainText('Next in 5s');
+    await expect($.countdown).toHaveText('5s');
     await page.clock.runFor(5_000);
     await expect($.currentBall).toHaveText('50');
   });
@@ -199,9 +199,9 @@ test.describe('voice in auto mode', () => {
     await page.clock.runFor(5_000);
     await page.keyboard.press('Space');
     await expect($.currentBall).toHaveText('50');
-    await expect($.countdown).toContainText('Speaking…');
+    await expect($.countdown).toHaveText('🔊');
     await page.evaluate(() => window.finishSpeaking());
-    await expect($.countdown).toContainText('Next in 5s');
+    await expect($.countdown).toHaveText('5s');
     await page.clock.runFor(5_000);
     await expect($.currentBall).toHaveText('5');
   });
