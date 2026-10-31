@@ -3,7 +3,7 @@
 A self-hosted 90-ball bingo caller for the browser, designed to be shown on a TV. Someone reads the numbers out; the app draws them, shows the current ball, the three before it and a board of every number called so far.
 
 - **Manual**: press **Release ball** (or `Space`) for each number.
-- **Auto**: draws a ball every few seconds; drag the slider to change the pace.
+- **Auto**: draws a ball every few seconds; drag the slider to change the pace. While it runs, the Auto button shows the seconds to the next ball and fills up as it gets closer.
 - **House calls**: numbers with a nickname show it under the ball ("Two fat ladies 88"), ready to read aloud.
 - **Prizes**: plays for 1 line, then 2 lines, then a full house, with a banner across the top saying which, and a checker for claims.
 - **History**: every ball, prize change, claim check and undo in order, with a plain-text download, for settling a dispute.
@@ -70,7 +70,7 @@ Voice is **off by default**, so the person calling stays the star. Turn it on wi
 
 - A ball with a house call is read exactly as written ("Two fat ladies 88"). Others get the traditional reading: "4 and 7, 47", "5 oh, 50", "Number 5 on his own". What's on screen doesn't change.
 - Pick the voice from the list next to the button. Only voices installed on the laptop are listed; online voices are left out so nothing depends on the Wi-Fi. It starts on a British voice (Daniel on a Mac) and remembers your choice.
-- In auto mode the countdown to the next ball starts once the voice has finished (the countdown shows "Speaking…" until then), but it never waits more than 8 seconds, so a stuck voice can't stall the game.
+- In auto mode the countdown to the next ball starts once the voice has finished (the Auto button shows 🔊 until then), but it never waits more than 8 seconds, so a stuck voice can't stall the game.
 - **Undo**, **New game** and pausing auto cut off whatever is being said.
 - Browsers only allow speech after someone has pressed a key or clicked, so the first ball after opening the page is spoken once you press `Space` or `A`. Nothing else is needed.
 - If the browser can't speak at all, the Voice button simply doesn't appear.

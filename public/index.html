@@ -51,8 +51,14 @@
       <button id="release" class="btn btn--primary" type="button">
         Release ball <kbd>Space</kbd>
       </button>
-      <button id="auto" class="btn" type="button" aria-pressed="false">
-        <span id="auto-label">Auto</span> <kbd>A</kbd>
+      <!-- While auto runs, the button fills up towards the next ball and shows
+           the seconds left (or 🔊 while the voice is speaking), so the
+           countdown takes no extra room in the footer. -->
+      <button id="auto" class="btn auto" type="button" aria-pressed="false">
+        <span class="auto__fill" aria-hidden="true"></span>
+        <span id="auto-label">Auto</span>
+        <span id="countdown" class="countdown" data-testid="countdown" hidden></span>
+        <kbd>A</kbd>
       </button>
 
       <label class="speed">
@@ -60,11 +66,6 @@
         <input id="speed" type="range" min="3" max="15" step="1" value="5" />
         <output id="speed-value" for="speed">5s</output>
       </label>
-
-      <div id="countdown" class="countdown" data-testid="countdown" hidden>
-        <div class="countdown__track"><div class="countdown__bar"></div></div>
-        <span id="countdown-text"></span>
-      </div>
 
       <button id="history" class="btn btn--quiet count" type="button" aria-haspopup="dialog" title="Game history">
         <span id="count" data-testid="count"></span> <kbd>H</kbd>

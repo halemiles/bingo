@@ -16,7 +16,7 @@ test('auto mode draws a ball every interval until paused', async ({ page }) => {
 
   await $.auto.click();
   await expect($.auto).toHaveAttribute('aria-pressed', 'true');
-  await expect($.countdown).toContainText('Next in 5s');
+  await expect($.countdown).toHaveText('5s');
 
   await page.clock.runFor(4_900);
   await expect($.currentBall).toHaveClass(/is-empty/);
@@ -87,13 +87,21 @@ test('after a reload, auto mode is paused', async ({ page }) => {
   await expect($.currentBall).toHaveText('1');
 });
 
-test('the countdown counts down to the next ball', async ({ page }) => {
+test('the Auto button counts down and fills up towards the next ball', async ({ page }) => {
   await openWithGame(page, sequenceStartingWith(1, 2));
   const $ = ui(page);
+  const progress = () => $.auto.evaluate((button) => Number(button.style.getPropertyValue('--progress')));
   await $.auto.click();
-  await expect($.countdown).toContainText('Next in 5s');
+  await expect($.countdown).toHaveText('5s');
   await page.clock.runFor(2_000);
-  await expect($.countdown).toContainText('Next in 3s');
+  await expect($.countdown).toHaveText('3s');
+  // 2 of 5 seconds gone: the button is 40% filled.
+  await expect.poll(progress).toBeCloseTo(0.4, 1);
+
+  // Pausing empties it again.
+  await $.auto.click();
+  await expect($.countdown).toBeHidden();
+  expect(await progress()).toBe(0);
 });
 
 test('opening a confirmation pauses auto, so no ball is drawn behind it', async ({ page }) => {

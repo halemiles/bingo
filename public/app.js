@@ -62,7 +62,6 @@ const el = {
   speed: $('speed'),
   speedValue: $('speed-value'),
   countdown: $('countdown'),
-  countdownText: $('countdown-text'),
   count: $('count'),
   undo: $('undo'),
   newGame: $('new-game'),
@@ -449,18 +448,21 @@ function renderAuto() {
   el.auto.setAttribute('aria-pressed', String(auto.running));
   el.autoLabel.textContent = auto.running ? 'Pause' : 'Auto';
   el.countdown.hidden = !auto.running;
+  if (!auto.running) el.auto.style.setProperty('--progress', '0');
 }
 
 function renderCountdown() {
   if (!auto.running) return;
   if (auto.waiting) {
-    el.countdown.style.setProperty('--progress', '0');
-    el.countdownText.textContent = 'Speaking…';
+    el.auto.style.setProperty('--progress', '0');
+    el.countdown.textContent = '🔊';
+    el.countdown.title = 'Speaking; the countdown starts when the voice has finished';
     return;
   }
   const remainingMs = Math.max(auto.nextAt - Date.now(), 0);
-  el.countdown.style.setProperty('--progress', String(1 - remainingMs / auto.intervalMs));
-  el.countdownText.textContent = `Next in ${Math.ceil(remainingMs / 1000)}s`;
+  el.auto.style.setProperty('--progress', String(1 - remainingMs / auto.intervalMs));
+  el.countdown.textContent = `${Math.ceil(remainingMs / 1000)}s`;
+  el.countdown.title = 'Time to the next ball';
 }
 
 function setSpeed(seconds, { save = true } = {}) {
