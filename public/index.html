@@ -53,11 +53,13 @@
       </button>
       <!-- While auto runs, the button fills up towards the next ball and shows
            the seconds left (or 🔊 while the voice is speaking), so the
-           countdown takes no extra room in the footer. -->
+           countdown takes no extra room in the footer. The seconds are
+           aria-hidden so a screen reader's name for the button doesn't
+           change every second; the button's title explains them instead. -->
       <button id="auto" class="btn auto" type="button" aria-pressed="false">
         <span class="auto__fill" aria-hidden="true"></span>
-        <span id="auto-label">Auto</span>
-        <span id="countdown" class="countdown" data-testid="countdown" hidden></span>
+        <span class="auto__label"><span id="auto-label">Auto</span></span>
+        <span id="countdown" class="countdown" data-testid="countdown" aria-hidden="true" hidden></span>
         <kbd>A</kbd>
       </button>
 

@@ -3,7 +3,7 @@
 A self-hosted 90-ball bingo caller for the browser, designed to be shown on a TV. Someone reads the numbers out; the app draws them, shows the current ball, the three before it and a board of every number called so far.
 
 - **Manual**: press **Release ball** (or `Space`) for each number.
-- **Auto**: draws a ball every few seconds; drag the slider to change the pace. While it runs, the Auto button shows the seconds to the next ball and fills up as it gets closer.
+- **Auto**: draws a ball every few seconds; drag the slider to change the pace. While it runs, the Auto button shows the seconds to the next ball and fills with a darker band as it gets closer.
 - **House calls**: numbers with a nickname show it under the ball ("Two fat ladies 88"), ready to read aloud.
 - **Prizes**: plays for 1 line, then 2 lines, then a full house, with a banner across the top saying which, and a checker for claims.
 - **History**: every ball, prize change, claim check and undo in order, with a plain-text download, for settling a dispute.
