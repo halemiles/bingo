@@ -6,8 +6,15 @@ import { GAME_KEY, findScenario, sequenceStartingWith } from '../../dev/scenario
 export { GAME_KEY, sequenceStartingWith };
 export const SPEED_KEY = 'bingo.speedSeconds.v1';
 
+// Waits for the app's own ready flag rather than the browser's `load` event.
+// Against the nginx container, Firefox under Playwright sometimes never
+// reports `load` for the first navigation in a new context (about 1 in 6 in
+// CI; reloads never hang). The suspect is the Cross-Origin-Opener-Policy
+// header, which makes that first navigation switch browsing context groups.
+// `data-ready` is what the app sets once its config and calls are loaded, so
+// it's the better signal anyway.
 export async function open(page) {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'commit' });
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
 }
 
