@@ -104,6 +104,40 @@ test('the Auto button counts down and fills up towards the next ball', async ({ 
   expect(await progress()).toBe(0);
 });
 
+test('the Auto button keeps a steady name while counting down', async ({ page }) => {
+  await openWithGame(page, sequenceStartingWith(1, 2));
+  const $ = ui(page);
+  await expect($.auto).toHaveAccessibleName('Auto A');
+  await $.auto.click();
+  await expect($.countdown).toHaveText('5s');
+  // The seconds are for sighted viewers; a screen reader hears a name that
+  // doesn't change every second, and the description says what they mean.
+  await expect($.auto).toHaveAccessibleName('Pause A');
+  await expect($.auto).toHaveAccessibleDescription(/next ball/);
+
+  // Pause and start again: the description comes back with the countdown.
+  await $.auto.click();
+  await expect($.auto).toHaveAccessibleName('Auto A');
+  await expect($.auto).not.toHaveAttribute('title');
+  await $.auto.click();
+  await expect($.countdown).toHaveText('5s');
+  await expect($.auto).toHaveAccessibleDescription(/next ball/);
+});
+
+test('the running Auto button stays green with the mouse over it', async ({ page }) => {
+  await openWithGame(page, sequenceStartingWith(1, 2));
+  const $ = ui(page);
+  const background = () => $.auto.evaluate((button) => getComputedStyle(button).backgroundColor);
+  await page.mouse.move(0, 0);
+  await $.auto.hover();
+  const idleHover = await background();
+
+  // Clicking leaves the mouse on the button; it should still look "on".
+  await $.auto.click();
+  await expect($.auto).toHaveAttribute('aria-pressed', 'true');
+  expect(await background()).not.toBe(idleHover);
+});
+
 test('opening a confirmation pauses auto, so no ball is drawn behind it', async ({ page }) => {
   await openWithGame(page, sequenceStartingWith(1, 2, 3));
   const $ = ui(page);

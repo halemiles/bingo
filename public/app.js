@@ -448,21 +448,31 @@ function renderAuto() {
   el.auto.setAttribute('aria-pressed', String(auto.running));
   el.autoLabel.textContent = auto.running ? 'Pause' : 'Auto';
   el.countdown.hidden = !auto.running;
-  if (!auto.running) el.auto.style.setProperty('--progress', '0');
+  if (!auto.running) {
+    el.auto.style.setProperty('--progress', '0');
+    el.countdown.textContent = '';
+    el.auto.removeAttribute('title');
+  }
 }
 
+// Runs every COUNTDOWN_REFRESH_MS, but the text only changes once a second:
+// only the fill is updated on every tick.
 function renderCountdown() {
   if (!auto.running) return;
   if (auto.waiting) {
     el.auto.style.setProperty('--progress', '0');
-    el.countdown.textContent = '🔊';
-    el.countdown.title = 'Speaking; the countdown starts when the voice has finished';
+    showCountdown('🔊', 'Speaking; the countdown to the next ball starts when the voice has finished');
     return;
   }
   const remainingMs = Math.max(auto.nextAt - Date.now(), 0);
   el.auto.style.setProperty('--progress', String(1 - remainingMs / auto.intervalMs));
-  el.countdown.textContent = `${Math.ceil(remainingMs / 1000)}s`;
-  el.countdown.title = 'Time to the next ball';
+  showCountdown(`${Math.ceil(remainingMs / 1000)}s`, 'The seconds to the next ball');
+}
+
+function showCountdown(text, description) {
+  if (el.countdown.textContent === text) return;
+  el.countdown.textContent = text;
+  el.auto.title = description;
 }
 
 function setSpeed(seconds, { save = true } = {}) {
@@ -766,6 +776,9 @@ async function init() {
   el.speed.min = String(config.autoMinSeconds);
   el.speed.max = String(config.autoMaxSeconds);
   el.speed.step = String(config.autoStepSeconds);
+  // Room in the Auto button for the longest countdown ("15s" is 3), and at
+  // least enough for the 🔊 shown while the voice speaks.
+  el.countdown.style.setProperty('--countdown-chars', String(Math.max(`${config.autoMaxSeconds}s`.length, 3)));
   setSpeed(readStorage(STORAGE_KEYS.speed) ?? config.autoDefaultSeconds, { save: false });
 
   buildBoard();

@@ -27,6 +27,7 @@
   --text-faint: #545a70;
   --accent: #ffd23f;
   --called: #1fa463;
+  --called-hover: #1a8c55;
   --called-text: #ffffff;
   --danger: #e5484d;
   --focus: #7cc4ff;
@@ -425,6 +426,13 @@ body.cursor-hidden * {
   color: #fff;
 }
 
+/* Outranks the generic grey hover: the mouse is usually still on a toggle
+   just after clicking it, and it should still look "on". */
+.btn[aria-pressed='true']:hover:not(:disabled) {
+  border-color: var(--called-hover);
+  background: var(--called-hover);
+}
+
 kbd {
   padding: 0.1em 0.4em;
   border: 1px solid currentColor;
@@ -455,8 +463,10 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* The Auto button doubles as the countdown: a lighter band sweeps across it
-   as the next ball approaches. */
+/* The Auto button doubles as the countdown: a darker band sweeps across it
+   as the next ball approaches. Darker, not lighter, so the white label gets
+   more contrast as the band passes under it, not less. The button is the
+   same width idle and running, so starting auto doesn't shift the footer. */
 .auto {
   position: relative;
   overflow: hidden;
@@ -467,20 +477,41 @@ kbd {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: rgb(255 255 255 / 0.28);
+  background: rgb(0 0 0 / 0.25);
   transform-origin: left;
   transform: scaleX(var(--progress, 0));
 }
 
+/* "Auto" and "Pause" share one grid cell sized to the wider word. The
+   hidden ::before holds the space and isn't read out. */
+.auto__label {
+  display: inline-grid;
+  justify-items: center;
+}
+
+.auto__label::before {
+  content: 'Pause';
+  visibility: hidden;
+}
+
+.auto__label::before,
+.auto__label > * {
+  grid-area: 1 / 1;
+}
+
 .countdown {
-  /* Room for "15s", so the button doesn't jitter as the seconds tick down. */
-  min-width: 2.6ch;
+  /* Room for the longest countdown the configured speeds allow ("15s" by
+     default): app.js sets --countdown-chars from the maximum speed, so the
+     button doesn't jitter as the seconds tick down. */
+  min-width: calc(var(--countdown-chars, 3) * 1ch);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
+/* Hidden while idle, but still holding its room. */
 .countdown[hidden] {
-  display: none;
+  display: inline-block;
+  visibility: hidden;
 }
 
 .count {

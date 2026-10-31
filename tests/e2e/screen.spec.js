@@ -14,6 +14,21 @@ async function expectOnScreen(locators, viewport) {
   }
 }
 
+// Time only moves via runFor(): an installed clock still ticks until paused.
+async function pauseClock(page) {
+  const start = new Date('2026-01-01T19:00:00Z');
+  await page.clock.install({ time: start });
+  await page.clock.pauseAt(new Date(start.getTime() + 1000));
+}
+
+// The footer's height (a second row would grow it) and where the speed
+// slider sits (the Auto button changing width would move it).
+async function footerLayout(page) {
+  const footer = await page.locator('.controls').boundingBox();
+  const slider = await ui(page).speed.boundingBox();
+  return { footerHeight: footer.height, sliderX: slider.x };
+}
+
 for (const viewport of [
   { width: 1920, height: 1080 },
   { width: 1366, height: 768 },
@@ -42,22 +57,26 @@ for (const viewport of [
     expect(banner.y + banner.height).toBeLessThanOrEqual((await $.cell(1).boundingBox()).y);
   });
 
-  test(`the footer stays on one row with auto running at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  test(`the footer doesn't move when auto runs at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
-    const start = new Date('2026-01-01T19:00:00Z');
-    await page.clock.install({ time: start });
-    await page.clock.pauseAt(new Date(start.getTime() + 1000));
+    await stubSpeech(page);
+    await pauseClock(page);
     await openScenario(page, 'fresh');
     const $ = ui(page);
-    const footer = page.locator('.controls');
-    const idleHeight = (await footer.boundingBox()).height;
+    await page.keyboard.press('m');
+    const idle = await footerLayout(page);
 
     // The slowest speed has the widest countdown ("15s").
     await $.speed.fill('15');
     await $.auto.click();
-    await expect($.countdown).toBeVisible();
-    expect((await footer.boundingBox()).height).toBe(idleHeight);
+    await expect($.countdown).toHaveText('15s');
+    expect(await footerLayout(page)).toEqual(idle);
     await expectOnScreen([$.auto, $.countdown, $.release, $.newGame], viewport);
+
+    // While the voice says the ball, the button shows 🔊 instead.
+    await page.clock.runFor(15_000);
+    await expect($.countdown).toHaveText('🔊');
+    expect(await footerLayout(page)).toEqual(idle);
   });
 
   test(`a full game's history fits on a ${viewport.width}x${viewport.height} screen`, async ({ page }) => {
@@ -91,6 +110,28 @@ for (const viewport of [
     await expectOnScreen([claim(page).input, claim(page).errors.last(), claim(page).submit], viewport);
   });
 }
+
+test('a countdown past 99s, as config.json allows, keeps the footer still', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.route('**/config.json', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ autoMinSeconds: 3, autoMaxSeconds: 120, autoDefaultSeconds: 120, autoStepSeconds: 1 }),
+    }),
+  );
+  await pauseClock(page);
+  await openScenario(page, 'fresh');
+  const $ = ui(page);
+  const idle = await footerLayout(page);
+
+  await $.auto.click();
+  await expect($.countdown).toHaveText('120s');
+  expect(await footerLayout(page)).toEqual(idle);
+  await page.clock.runFor(111_000);
+  await expect($.countdown).toHaveText('9s');
+  expect(await footerLayout(page)).toEqual(idle);
+});
 
 test('F toggles fullscreen and the button label follows', async ({ page }) => {
   await open(page);
