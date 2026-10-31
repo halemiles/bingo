@@ -1,9 +1,13 @@
 name: CI
 
+# Changes that only touch Markdown (README, PLAN, CLAUDE.md) skip CI.
+# Anything else in the same change still runs it.
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md']
   pull_request:
+    paths-ignore: ['**.md']
   workflow_dispatch:
 
 permissions:
