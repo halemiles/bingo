@@ -19,16 +19,16 @@ In cloud sessions Firefox usually can't be downloaded (`cdn.playwright.dev` is b
 ## Architecture rules
 
 - **Static site, no backend, no build step, no runtime dependencies.** Vanilla ES modules in `public/`. The only dev dependency is `@playwright/test`; think hard before adding another.
-- **Logic stays out of the DOM.** `game.js`, `calls.js` and `config.js` are pure and unit-tested under Node. `app.js` is the only file that touches the DOM, and is covered by Playwright. New logic goes in a pure module with its own `tests/unit/*.test.js`. Node's coverage only counts files a test imports, so an untested module silently escapes the threshold.
-- **Game state** is `{ sequence, drawnCount }` in `localStorage` under `bingo.game.v1`, validated by `isValidState`. When adding fields (e.g. the prize stage in #2), games saved by the older version must still load: default the new fields instead of rejecting the save. Storage access can throw, so always go through `readStorage`/`writeStorage`.
+- **Logic stays out of the DOM.** `game.js`, `claims.js`, `calls.js` and `config.js` are pure and unit-tested under Node. `app.js` is the only file that touches the DOM, and is covered by Playwright. New logic goes in a pure module with its own `tests/unit/*.test.js`. Node's coverage only counts files a test imports, so an untested module silently escapes the threshold.
+- **Game state** is `{ sequence, drawnCount, stage }` in `localStorage` under `bingo.game.v1`, loaded through `restoreGame` (which uses `isValidState` for the balls). When adding fields, games saved by the older version must still load: default the new fields instead of rejecting the save, as `restoreGame` does for `stage`. Storage access can throw, so always go through `readStorage`/`writeStorage`.
 - **Randomness** uses `secureRandomInt` (`crypto.getRandomValues` with rejection sampling). Never `Math.random`.
 - **Data files** (`public/data/calls.json`, the rendered `config.json`) are user-edited: validate them, skip bad entries, never crash, and render text with `textContent`, never `innerHTML`.
 
 ## UI rules
 
 - TV first: 16:9, readable from across a room. Size things with `vh`/`vw`/container units, not pixels. `tests/e2e/screen.spec.js` checks everything fits at 1920×1080, 1366×768 and 1280×720; extend it for new on-screen elements.
-- Keyboard: `Space` release ball, `A` auto, `F` fullscreen; planned `C` check claim, `N` next stage (#2), `M` voice (#4). The global handler ignores Cmd/Ctrl/Alt combos, key repeat and keys while a dialog is open; keep it that way. `Space` always releases a ball, even when a button has focus.
-- Confirmations use the in-page `<dialog>` via `confirmAction()`, with Cancel focused. Never use `window.confirm()`: it exits fullscreen. Opening one pauses auto mode.
+- Keyboard: `Space` release ball, `A` auto, `C` check claim, `N` next stage, `F` fullscreen; planned `M` voice (#4). The global handler ignores Cmd/Ctrl/Alt combos, key repeat and keys while any dialog is open; keep it that way. A text field inside a closed dialog isn't a typing target (focus lingers there for a task after `close()`). `Space` always releases a ball, even when a button has focus.
+- Dialogs go through `showDialog()`; confirmations use `confirmAction()` on top of it, with Cancel focused. Never use `window.confirm()`: it exits fullscreen. Opening any dialog (confirm, stage picker, claim checker) pauses auto mode.
 - Fonts and assets are bundled; nothing is loaded from another origin.
 
 ## Security / hosting rules
@@ -56,5 +56,4 @@ In cloud sessions Firefox usually can't be downloaded (`cdn.playwright.dev` is b
 
 ## Open work
 
-- #2 Prize stages and claim checker: stage banner at the top, `C`/`N`, stage saved with the game.
 - #4 Voice calling: Web Speech API, off by default, `M`, traditional reading unless `calls.json` has a call; plus the README Mac voice-setup section.

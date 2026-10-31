@@ -14,12 +14,14 @@ The caller is a child, so the current ball's text needs to be easy to read aloud
   - **Current ball** — large and prominent, readable from across a room, with its bingo call underneath when it has one.
   - **Last 3 balls** — the three called before the current one (4 balls on screen in total).
   - **Board** — all 90 numbers in a grid; called numbers highlighted green.
+- **Prize stages**: plays for 1 line → 2 lines → full house, shown in a banner across the top. The caller moves on; it's never automatic.
+- **Claim checker**: type or paste a player's ticket lines and see whether they've won.
 - Runs entirely in the browser, self-hosted, no accounts, no external calls.
 
 ## Non-goals (for now)
 
 - Voice calling (a human calls the numbers).
-- Player tickets / automatic winner detection.
+- Player tickets held in the app / automatic winner detection. The caller checks a claim when someone shouts.
 - Multi-device sync (e.g. phone as remote, TV as display).
 
 ## Architecture
@@ -35,6 +37,7 @@ bingo/
 │   ├── styles.css
 │   ├── app.js          # UI wiring: DOM, timers, buttons, keyboard
 │   ├── game.js         # Pure game logic, no DOM — unit-testable
+│   ├── claims.js       # Pure claim checking: parse ticket lines, check vs. draw
 │   ├── calls.js        # Loads + validates data/calls.json
 │   ├── config.js       # Loads + validates config.json (auto speed)
 │   ├── data/calls.json # The house bingo calls, editable
@@ -59,6 +62,7 @@ Pure functions over a plain state object so it's trivial to test and persist:
 state = {
   sequence: [/* 90 numbers, shuffled at game start */],
   drawnCount: 0,
+  stage: 0, // index into STAGES: 0 = 1 line, 1 = 2 lines, 2 = full house
 }
 ```
 
@@ -66,6 +70,8 @@ state = {
 - `draw(state)` — returns new state with `drawnCount + 1`; no-op once all 90 are out.
 - `undo(state)` — steps back one ball (for mis-clicks).
 - Derived views: `currentBall`, `recentBalls`, `calledBalls`, `isFinished`.
+- `nextStage(state)` / `setStage(state, i)` — move between prizes; `newGame()` starts at 1 line.
+- `restoreGame(saved)` — validates a save and defaults `stage` to 0 when it's missing or nonsense, so games saved before stages existed still load with their balls.
 
 The auto speed is a per-browser setting stored separately, not part of the game.
 
@@ -92,6 +98,20 @@ A plain map of number → the exact phrase to read out. Only numbers with a call
 - Calls are rendered with `textContent`, never `innerHTML`, so an edited file can't inject markup.
 - When voice is added later, the same phrases feed straight into speech.
 
+### Prize stages & checking a claim (`claims.js`)
+
+A game plays for **1 line**, then **2 lines**, then **full house**. The stage is part of the game state, saved with it, and reset by **New game**. It only moves when the caller says so (**Next stage** / `N`), because several people can win on the same ball. Clicking the banner picks a stage directly, to undo a slip.
+
+**Check claim** (`C`) opens a dialog over the game and pauses auto. The caller types or pastes the player's ticket, **one ticket line per line of text**, 5 numbers each: 1 line, 2 lines or 3 lines (15 numbers) depending on the stage.
+
+- `parseClaim(text, lines)` splits on newlines and on spaces, commas or semicolons, and reports **every** problem at once: wrong number of lines, a line without exactly 5 numbers, anything that isn't a whole number 1–90, and a number entered twice anywhere (a ticket never repeats one).
+- `checkClaim(lines, state)` — a win when every number is among the drawn balls. It also reports which ball finished the claim and how many balls ago, so a late claim gets a gentle "complete since 61, 3 balls ago". There's deliberately no "must win on the last number" rule: house rules vary and the caller decides.
+- `describeResult` builds the words: "1 line! ✅", "Full house! 🎉", or "Not yet: 23 and 61 not called" (a count instead once more than 5 are missing).
+- The result shows each entered number marked called (filled, bold) or not (dashed outline), so it doesn't rely on colour.
+- After a result: **Check another** keeps the stage, for shared wins. **Next stage** is offered after a win. After a full house, **New game** is offered (still behind the usual confirmation) but never forced.
+
+The checker trusts the caller to type a real ticket line; it doesn't validate 90-ball ticket structure (column ranges, blanks). That would reject typos less clearly than it helps.
+
 ### Persistence & recovery
 
 State is saved to `localStorage` after every change. A page refresh, browser crash or accidental tab close mid-game restores exactly where you were. Auto mode always resumes **paused** after a reload so it never fires balls before the caller is ready.
@@ -115,6 +135,7 @@ State is saved to `localStorage` after every change. A page refresh, browser cra
 Layout:
 
 ```
+             ( Playing for: 1 line )        [Check claim] [Next stage]
 ┌───────────────────────────────┬─────────────────────────────┐
 │                               │  1  2  3  4  5  6  7  8  9 10│
 │          ( 88 )               │ 11 12 13 14 15 16 17 18 19 20│
@@ -132,8 +153,9 @@ Layout:
 - Newly drawn ball gets a brief highlight/animation on both the main ball and the board cell.
 - **Auto mode**: toggle button + speed slider (3–15 s, default 5 s, range configurable — see [Configuration](#configuration)). The chosen speed is remembered between games. Changing speed takes effect on the next tick. While Auto is running, **Release ball** draws immediately and restarts the countdown. A small countdown indicator shows time to next ball.
 - Auto stops automatically when all 90 are drawn.
+- **Prize banner** across the top: "Playing for: 1 line", large enough to read on the TV, with **Check claim** and **Next stage** beside it. Keeping the prize controls together up there also keeps the footer to one row at 1280×720.
 - **New game** and **Undo** require confirmation in an in-page `<dialog>` (an accidental "New game" mid-session is the one catastrophic UX failure here). Cancel has focus by default, so a stray `Space` is harmless. A native `confirm()` would kick the browser out of fullscreen.
-- **Keyboard**: `Space` = release ball, `A` = toggle auto, `F` = fullscreen. Useful with a clicker/presenter remote. `Space` always releases a ball even when a button has focus, so a child pressing it can't toggle something else by accident.
+- **Keyboard**: `Space` = release ball, `A` = toggle auto, `C` = check claim, `N` = next stage, `F` = fullscreen. Useful with a clicker/presenter remote. `Space` always releases a ball even when a button has focus, so a child pressing it can't toggle something else by accident.
 - Fullscreen button (Fullscreen API) for TV use.
 - Accessibility: called state isn't conveyed by colour alone (bold + tick/strike style as well as green); `aria-live` region announces the current ball for screen readers.
 
@@ -166,8 +188,9 @@ environment:
 
 ## Testing
 
-- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
+- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). Stage moves stop at full house; old saves restore at 1 line. Claims: parsing and every validation message, win, not yet, complete-since. The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
 - **E2E** (Playwright): release ball updates main ball, last-3 and board; a ball with a call shows its phrase, a ball without one shows none (using a seeded sequence so the test knows which ball comes next); a missing `calls.json` doesn't break the game; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; custom speed range from `config.json`; fallback when it is missing; undo; new game confirmation; state survives reload; game ends cleanly at 90.
+- **Prizes** (Playwright): checking at each stage, a shared win (check another), a failed claim, validation errors, pasting, the `C` and `N` keys, picking a stage from the banner, the stage surviving a reload and resetting on a new game, a pre-stages save loading at 1 line.
 - **Hardening for the night** (Playwright): holding `Space` releases one ball; Cmd/Ctrl/Alt shortcuts are left to the browser; shortcuts are ignored while a dialog is open; opening a dialog pauses auto; the layout fits at 1920×1080, 1366×768 and 1280×720; fullscreen and cursor hiding; Wake Lock requested on the first ball and re-requested after loss (stubbed); blocked storage and unparseable saves don't break the game; the screen-reader announcement.
 - **Container only** (`BASE_URL` set): security headers, `/healthz`, rendered `config.json`, and no console or CSP errors during play.
 - **Browsers**: every Playwright test runs in Chromium and Firefox, the browser used on the night.
@@ -191,7 +214,7 @@ All five phases are built.
 - An in-app editor for calls, so the caller can add new ones themselves. It would need somewhere to save them: `localStorage` for one browser, or a small backend for anything shared.
 - Separate **caller** and **display** views — same machine via `BroadcastChannel` (no backend), or across devices via a tiny WebSocket server.
 - Game history / export of the called sequence (useful for verifying a disputed claim).
-- "Check a ticket" helper: type in a player's numbers and see which are called.
+- Configurable prize stages (e.g. corners, or a single "full house only" game) via `config.json`.
 
 ## Decisions
 
@@ -199,3 +222,4 @@ All five phases are built.
 - **Primary display:** a TV driven by a laptop over HDMI.
 - **Auto speed:** 3–15 s, default 5 s, configurable through env vars.
 - **Caller:** a child reads the numbers aloud; the house calls are shown under the current ball, stored as editable data in `calls.json`.
+- **Prizes:** 1 line → 2 lines → full house, moved on by hand only. Claims are typed one ticket line per row; a late claim is noted, not refused.

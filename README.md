@@ -5,6 +5,7 @@ A self-hosted 90-ball bingo caller for the browser, designed to be shown on a TV
 - **Manual**: press **Release ball** (or `Space`) for each number.
 - **Auto**: draws a ball every few seconds; drag the slider to change the pace.
 - **House calls**: numbers with a nickname show it under the ball ("Two fat ladies 88"), ready to read aloud.
+- **Prizes**: plays for 1 line, then 2 lines, then a full house, with a banner across the top saying which, and a checker for claims.
 - No backend, no accounts, no external requests. The game is saved in the browser, so a refresh or crash picks up where you left off.
 
 ## Run it
@@ -29,11 +30,24 @@ npm start
 | ------- | ------------------------------------ |
 | `Space` | Release the next ball                |
 | `A`     | Start / pause auto mode              |
+| `C`     | Check a claim                        |
+| `N`     | Move on to the next prize            |
 | `F`     | Toggle fullscreen                    |
 
 - `Space` always releases a ball, whatever has focus, so it's hard to press the wrong thing.
 - **Undo** and **New game** ask first, and **Cancel** is selected by default.
 - After a reload, auto mode is always paused, so balls don't start flying before the caller is ready.
+
+### Prizes and claims
+
+The banner at the top shows what's being played for: **1 line**, **2 lines**, then **Full house**. It never moves on by itself, because more than one person can win on the same ball: press **Next stage** (or `N`) when you're ready. If you move on by mistake, click the banner and pick the right stage. The stage is saved with the game, and **New game** goes back to 1 line.
+
+When someone shouts, press **Check claim** (or `C`). Auto mode pauses. Type or paste the numbers from their ticket, one ticket line per line of text, 5 numbers to a line: 1 line for the first prize, 2 for the second, all 3 for a full house. Spaces or commas between numbers both work. Press **Check** (or `Ctrl`+`Enter`, `Cmd`+`Enter` on a Mac).
+
+- **A win** shows "1 line! ✅" with every number ticked. If the line was already complete a few balls ago, a note says which ball finished it. It still counts.
+- **Not yet** names the numbers that haven't been called and marks them with a dashed outline.
+- **Check another** checks the next person's ticket for the same prize, for shared wins. **Next stage** appears after a win.
+- After a **full house** you're offered a new game (it still asks first), but you can close the box and carry on.
 
 ## Customising
 
@@ -97,7 +111,8 @@ BASE_URL=http://localhost:8080 npm run test:e2e
 public/
   index.html, styles.css
   app.js         UI: rendering, auto timer, keyboard, persistence
-  game.js        Pure game logic (shuffle, draw, undo)
+  game.js        Pure game logic (shuffle, draw, undo, prize stages)
+  claims.js      Pure claim checking (parse a ticket, check it against the draw)
   calls.js       Loads and validates data/calls.json
   config.js      Loads and validates config.json (auto speed)
   data/calls.json

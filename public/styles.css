@@ -63,7 +63,7 @@ body {
 
 body {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 2.5vh;
   height: 100vh;
   height: 100dvh;
@@ -96,6 +96,48 @@ body.cursor-hidden * {
 }
 
 /* ---------- Layout ---------- */
+
+/* The prize being played for, centred across the top of the TV. */
+/* Banner in the middle column, prize actions in the right one; the empty
+   left column keeps the banner centred on screen. */
+.prize {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1.4vw;
+}
+
+.prize__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1vw;
+}
+
+.banner {
+  grid-column: 2;
+  padding: 0.25em 1.2em;
+  border: 0.08em solid var(--accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 4.2vh;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.banner:hover {
+  background: var(--surface-raised);
+}
+
+.banner__label {
+  color: var(--text-dim);
+}
+
+.banner__name {
+  color: var(--accent);
+  font-weight: 700;
+}
 
 .stage {
   display: grid;
@@ -420,7 +462,7 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Dialog ---------- */
+/* ---------- Dialogs ---------- */
 
 .dialog {
   max-width: min(40em, 90vw);
@@ -447,10 +489,132 @@ kbd {
   gap: 1em;
 }
 
+.dialog--wide {
+  width: min(48em, 92vw);
+  max-width: none;
+}
+
+.stage-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  margin-bottom: 1.5em;
+}
+
+.stage-option {
+  justify-content: center;
+  font-size: 1.3em;
+}
+
+.claim__entry,
+.claim__result {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+}
+
+.claim [hidden] {
+  display: none;
+}
+
+.claim__hint {
+  color: var(--text-dim);
+}
+
+.claim__input {
+  width: 100%;
+  padding: 0.5em 0.7em;
+  border: 1px solid #3a3f55;
+  border-radius: 0.5em;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.5em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  word-spacing: 0.3em;
+  resize: none;
+}
+
+.claim__input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.claim__errors {
+  margin: 0;
+  padding-left: 1.2em;
+  color: #ff8f92;
+}
+
+.claim__errors:empty {
+  display: none;
+}
+
+.claim__verdict {
+  margin: 0;
+  color: var(--accent);
+  font-size: 1.8em;
+  font-weight: 700;
+}
+
+.claim__verdict.is-win {
+  color: var(--called);
+}
+
+.claim__note {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.claim__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+}
+
+.claim__line {
+  display: flex;
+  gap: 0.6em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Called and missing differ in fill, outline and weight, not just colour. */
+.chip {
+  display: grid;
+  place-items: center;
+  width: 2.8em;
+  height: 2.8em;
+  border-radius: 0.4em;
+  font-size: 1.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip.is-called {
+  background: var(--called);
+  color: var(--called-text);
+  font-weight: 700;
+}
+
+.chip.is-missing {
+  border: 0.12em dashed var(--text-dim);
+  color: var(--text-dim);
+}
+
 /* ---------- Motion ---------- */
 
 .pop {
   animation: pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.flash {
+  animation: flash 1.2s ease-out;
+}
+
+@keyframes flash {
+  0% { transform: scale(1.1); box-shadow: 0 0 0 0.35em rgb(255 210 63 / 0.6); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0.35em rgb(255 210 63 / 0); }
 }
 
 @keyframes pop {
@@ -464,6 +628,7 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   .pop,
+  .flash,
   .cell.is-latest {
     animation: none;
   }
@@ -478,6 +643,12 @@ kbd {
 
   .stage {
     grid-template-columns: 1fr;
+  }
+
+  .prize {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .balls {

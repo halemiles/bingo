@@ -10,6 +10,16 @@
     <script type="module" src="app.js"></script>
   </head>
   <body>
+    <header class="prize">
+      <button id="stage-banner" class="banner" type="button" data-testid="stage-banner" aria-haspopup="dialog">
+        <span class="banner__label">Playing for:</span> <span id="stage-name" class="banner__name"></span>
+      </button>
+      <div class="prize__actions">
+        <button id="check" class="btn" type="button" aria-haspopup="dialog">Check claim <kbd>C</kbd></button>
+        <button id="next-stage" class="btn btn--quiet" type="button">Next stage <kbd>N</kbd></button>
+      </div>
+    </header>
+
     <main class="stage">
       <section class="balls" aria-label="Balls">
         <div class="current">
@@ -68,6 +78,44 @@
         <div class="dialog__actions">
           <button id="confirm-cancel" class="btn" value="cancel">Cancel</button>
           <button id="confirm-ok" class="btn btn--danger" value="ok">OK</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="stage-picker" class="dialog" aria-labelledby="stage-picker-title" data-testid="stage-picker">
+      <form method="dialog">
+        <h2 id="stage-picker-title" class="dialog__message">Playing for…</h2>
+        <div id="stage-options" class="stage-options"></div>
+        <div class="dialog__actions">
+          <button class="btn btn--quiet" value="cancel">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="claim" class="dialog dialog--wide" aria-labelledby="claim-title" data-testid="claim">
+      <form id="claim-form" class="claim" novalidate>
+        <h2 id="claim-title" class="dialog__message">Check a claim</h2>
+
+        <div id="claim-entry" class="claim__entry">
+          <label id="claim-hint" class="claim__hint" for="claim-numbers"></label>
+          <textarea id="claim-numbers" class="claim__input" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="claim-errors"></textarea>
+          <ul id="claim-errors" class="claim__errors" role="alert"></ul>
+          <div class="dialog__actions">
+            <button id="claim-cancel" class="btn btn--quiet" type="button">Cancel</button>
+            <button id="claim-submit" class="btn btn--primary" type="submit">Check</button>
+          </div>
+        </div>
+
+        <div id="claim-result" class="claim__result" hidden>
+          <p id="claim-verdict" class="claim__verdict" data-testid="claim-verdict" role="status"></p>
+          <p id="claim-note" class="claim__note" data-testid="claim-note"></p>
+          <div id="claim-lines" class="claim__lines" data-testid="claim-lines"></div>
+          <div class="dialog__actions">
+            <button id="claim-close" class="btn btn--quiet" type="button">Close</button>
+            <button id="claim-again" class="btn" type="button">Check another</button>
+            <button id="claim-next" class="btn btn--primary" type="button" hidden>Next stage</button>
+            <button id="claim-new-game" class="btn btn--primary" type="button" hidden>New game</button>
+          </div>
         </div>
       </form>
     </dialog>
