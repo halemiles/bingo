@@ -113,6 +113,33 @@ body.cursor-hidden * {
   gap: 1vw;
 }
 
+.prize__voice {
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  min-width: 0;
+}
+
+.prize__voice[hidden],
+.voice-picker[hidden] {
+  display: none;
+}
+
+.voice-picker {
+  min-width: 0;
+}
+
+.voice-picker select {
+  max-width: 100%;
+  padding: 0.5em 0.6em;
+  border: 1px solid #3a3f55;
+  border-radius: 0.5em;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
 .banner {
   grid-column: 2;
   padding: 0.25em 1.2em;

@@ -1,7 +1,7 @@
 // The TV setup: everything fits without scrolling, fullscreen, cursor
 // hiding, keeping the screen awake, and surviving blocked storage.
 import { test, expect } from './fixtures.js';
-import { open, openWithGame, sequenceStartingWith, ui, claim, checkClaim } from './helpers.js';
+import { open, openWithGame, sequenceStartingWith, ui, claim, checkClaim, stubSpeech, TEST_VOICES } from './helpers.js';
 
 async function expectOnScreen(locators, viewport) {
   for (const locator of locators) {
@@ -21,13 +21,22 @@ for (const viewport of [
 ]) {
   test(`everything fits on a ${viewport.width}x${viewport.height} screen`, async ({ page }) => {
     await page.setViewportSize(viewport);
+    // A long voice name, to check the picker can't push the banner around.
+    await stubSpeech(page, {
+      voices: [{ name: 'Daniel (Premium) British English with a long name', lang: 'en-GB', localService: true, voiceURI: 'long' }, ...TEST_VOICES],
+    });
     // Full house is the longest banner.
     await openWithGame(page, sequenceStartingWith(88, 47, 12, 3), 4, { stage: 2 });
     const $ = ui(page);
+    await page.keyboard.press('m');
+    await expect($.voicePicker).toBeVisible();
     await expectOnScreen(
-      [$.stageBanner, $.check, $.nextStage, $.currentBall, $.currentCall, $.recent.last(), $.cell(1), $.cell(90), $.release, $.newGame],
+      [$.voice, $.voicePicker, $.stageBanner, $.check, $.nextStage, $.currentBall, $.currentCall, $.recent.last(), $.cell(1), $.cell(90), $.release, $.newGame],
       viewport,
     );
+    // The voice controls stay clear of the banner.
+    const picker = await $.voicePicker.boundingBox();
+    expect(picker.x + picker.width).toBeLessThanOrEqual((await $.stageBanner.boundingBox()).x);
     // The banner sits above the game, clear of the board.
     const banner = await $.stageBanner.boundingBox();
     expect(banner.y + banner.height).toBeLessThanOrEqual((await $.cell(1).boundingBox()).y);

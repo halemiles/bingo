@@ -6,6 +6,7 @@ A self-hosted 90-ball bingo caller for the browser, designed to be shown on a TV
 - **Auto**: draws a ball every few seconds; drag the slider to change the pace.
 - **House calls**: numbers with a nickname show it under the ball ("Two fat ladies 88"), ready to read aloud.
 - **Prizes**: plays for 1 line, then 2 lines, then a full house, with a banner across the top saying which, and a checker for claims.
+- **Voice** (optional, off by default): reads each ball aloud with the laptop's own voices. Nothing is sent off the device.
 - No backend, no accounts, no external requests. The game is saved in the browser, so a refresh or crash picks up where you left off.
 
 ## Run it
@@ -32,6 +33,7 @@ npm start
 | `A`     | Start / pause auto mode              |
 | `C`     | Check a claim                        |
 | `N`     | Move on to the next prize            |
+| `M`     | Turn the voice on / off              |
 | `F`     | Toggle fullscreen                    |
 
 - `Space` always releases a ball, whatever has focus, so it's hard to press the wrong thing.
@@ -48,6 +50,23 @@ When someone shouts, press **Check claim** (or `C`). Auto mode pauses. Type or p
 - **Not yet** names the numbers that haven't been called and marks them with a dashed outline.
 - **Check another** checks the next person's ticket for the same prize, for shared wins. **Next stage** appears after a win.
 - After a **full house** you're offered a new game (it still asks first), but you can close the box and carry on.
+
+### Voice
+
+Voice is **off by default**, so the person calling stays the star. Turn it on with **Voice** (top left) or `M`; the setting is remembered. Once it's on:
+
+- A ball with a house call is read exactly as written ("Two fat ladies 88"). Others get the traditional reading: "4 and 7, 47", "5 oh, 50", "Number 5 on his own". What's on screen doesn't change.
+- Pick the voice from the list next to the button. Only voices installed on the laptop are listed; online voices are left out so nothing depends on the Wi-Fi. It starts on a British voice (Daniel on a Mac) and remembers your choice.
+- In auto mode the countdown to the next ball starts once the voice has finished (the countdown shows "Speaking…" until then), but it never waits more than 8 seconds, so a stuck voice can't stall the game.
+- **Undo**, **New game** and pausing auto cut off whatever is being said.
+- Browsers only allow speech after someone has pressed a key or clicked, so the first ball after opening the page is spoken once you press `Space` or `A`. Nothing else is needed.
+- If the browser can't speak at all, the Voice button simply doesn't appear.
+
+#### Setting up voice on a Mac
+
+1. **Get a better voice.** The built-in voices are compact. Open **System Settings → Accessibility → Spoken Content → System voice → Manage Voices…**, then under English download an **Enhanced** or **Premium** British voice (for example Daniel, Kate or Serena). They're free and run on the laptop. Quit and reopen Firefox afterwards so it sees them; the app picks a Premium or Enhanced Daniel over the compact one by itself.
+2. **Send the sound to the TV.** Open **System Settings → Sound → Output** and choose the TV (it's listed by name, over HDMI). Turn the TV volume up rather than the laptop's if it sounds quiet.
+3. **Check it in the app.** Press `M` (or click **Voice**), pick a voice from the list, then release the first ball with `Space` and listen.
 
 ## Customising
 
@@ -99,6 +118,12 @@ npm test
 | `npm run test:e2e` | Playwright in Chromium and Firefox, against a small built-in dev server |
 | `npm run test:e2e:coverage` | Playwright in Chromium, then a per-line coverage report of the browser code |
 
+### Trying things out: scenarios
+
+`npm start` also serves a page of ready-made games at <http://127.0.0.1:8080/dev/>: a house call next, the traditional readings next, a line ready to claim (with the numbers to paste), a full house one ball away, the last ball, a save from an older version, and so on. Pick one and it replaces the game saved in that browser, then opens the caller. It's handy for checking the voice on the real laptop.
+
+The same scenarios live in [`dev/scenarios.js`](dev/scenarios.js) and the Playwright tests use them through `openScenario(page, id)`, so a manual check and a test set up exactly the same game. The page is part of the dev server only: the Docker image serves `public/` and nothing else, so it can't replace a game on the night.
+
 To run the Playwright suite against a running container instead (this also runs the container-only checks for security headers, `/healthz` and `config.json`):
 
 ```bash
@@ -110,9 +135,11 @@ BASE_URL=http://localhost:8080 npm run test:e2e
 ```
 public/
   index.html, styles.css
-  app.js         UI: rendering, auto timer, keyboard, persistence
+  app.js         UI: rendering, auto timer, voice, keyboard, persistence
   game.js        Pure game logic (shuffle, draw, undo, prize stages)
   claims.js      Pure claim checking (parse a ticket, check it against the draw)
+  speech-text.js Pure: what the voice says for a ball
+  voices.js      Pure: which voices to offer, and the default
   calls.js       Loads and validates data/calls.json
   config.js      Loads and validates config.json (auto speed)
   data/calls.json
@@ -120,7 +147,8 @@ public/
 docker/
   nginx.conf
   40-bingo-config.sh   Renders env vars into config.json at startup
-scripts/serve.js       Dev server
+dev/                   Scenario page and shared scenarios (dev server only)
+scripts/serve.js       Dev server (serves public/, and dev/ at /dev/)
 scripts/e2e-coverage.js  Line coverage report for the browser code
 tests/unit, tests/e2e
 ```

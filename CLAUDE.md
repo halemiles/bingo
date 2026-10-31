@@ -5,7 +5,7 @@ Self-hosted 90-ball bingo caller. A child reads the numbers aloud from a TV: a M
 ## Commands
 
 ```bash
-npm start                   # dev server on http://127.0.0.1:8080 (no install needed)
+npm start                   # dev server on http://127.0.0.1:8080 (no install needed); scenarios at /dev/
 npm run test:unit           # node:test, zero deps
 npm run test:unit:coverage  # same, enforcing 100% lines/functions, 95% branches on public/
 npm run test:e2e            # Playwright, Chromium + Firefox
@@ -19,7 +19,7 @@ In cloud sessions Firefox usually can't be downloaded (`cdn.playwright.dev` is b
 ## Architecture rules
 
 - **Static site, no backend, no build step, no runtime dependencies.** Vanilla ES modules in `public/`. The only dev dependency is `@playwright/test`; think hard before adding another.
-- **Logic stays out of the DOM.** `game.js`, `claims.js`, `calls.js` and `config.js` are pure and unit-tested under Node. `app.js` is the only file that touches the DOM, and is covered by Playwright. New logic goes in a pure module with its own `tests/unit/*.test.js`. Node's coverage only counts files a test imports, so an untested module silently escapes the threshold.
+- **Logic stays out of the DOM.** `game.js`, `claims.js`, `speech-text.js`, `voices.js`, `calls.js` and `config.js` are pure and unit-tested under Node. `app.js` is the only file that touches the DOM, and is covered by Playwright. New logic goes in a pure module with its own `tests/unit/*.test.js`. Node's coverage only counts files a test imports, so an untested module silently escapes the threshold.
 - **Game state** is `{ sequence, drawnCount, stage }` in `localStorage` under `bingo.game.v1`, loaded through `restoreGame` (which uses `isValidState` for the balls). When adding fields, games saved by the older version must still load: default the new fields instead of rejecting the save, as `restoreGame` does for `stage`. Storage access can throw, so always go through `readStorage`/`writeStorage`.
 - **Randomness** uses `secureRandomInt` (`crypto.getRandomValues` with rejection sampling). Never `Math.random`.
 - **Data files** (`public/data/calls.json`, the rendered `config.json`) are user-edited: validate them, skip bad entries, never crash, and render text with `textContent`, never `innerHTML`.
@@ -27,9 +27,10 @@ In cloud sessions Firefox usually can't be downloaded (`cdn.playwright.dev` is b
 ## UI rules
 
 - TV first: 16:9, readable from across a room. Size things with `vh`/`vw`/container units, not pixels. `tests/e2e/screen.spec.js` checks everything fits at 1920×1080, 1366×768 and 1280×720; extend it for new on-screen elements.
-- Keyboard: `Space` release ball, `A` auto, `C` check claim, `N` next stage, `F` fullscreen; planned `M` voice (#4). The global handler ignores Cmd/Ctrl/Alt combos, key repeat and keys while any dialog is open; keep it that way. A text field inside a closed dialog isn't a typing target (focus lingers there for a task after `close()`). `Space` always releases a ball, even when a button has focus.
+- Keyboard: `Space` release ball, `A` auto, `C` check claim, `N` next stage, `M` voice, `F` fullscreen. The global handler ignores Cmd/Ctrl/Alt combos, key repeat and keys while any dialog is open; keep it that way. A text field inside a closed dialog isn't a typing target (focus lingers there for a task after `close()`). `Space` always releases a ball, even when a button has focus.
 - Dialogs go through `showDialog()`; confirmations use `confirmAction()` on top of it, with Cancel focused. Never use `window.confirm()`: it exits fullscreen. Opening any dialog (confirm, stage picker, claim checker) pauses auto mode.
 - Fonts and assets are bundled; nothing is loaded from another origin.
+- Voice is off by default and uses local voices only (`localService`). Anything that interrupts the game (undo, new game, pause) calls `stopSpeaking()`; `stopAuto()` itself doesn't, so the 90th ball is still said in full. Auto waits on speech through `waitThenSchedule()`, guarded by `auto.turn`.
 
 ## Security / hosting rules
 
@@ -42,9 +43,11 @@ In cloud sessions Firefox usually can't be downloaded (`cdn.playwright.dev` is b
 ## Testing conventions
 
 - Import `test`/`expect` from `tests/e2e/fixtures.js`, not `@playwright/test`; the fixture collects coverage.
-- Use `openWithGame(page, sequenceStartingWith(...))` from `helpers.js` to fix the draw order; locators live in `ui(page)`.
+- Use `openScenario(page, id)` for a ready-made game from `dev/scenarios.js` (the same ones the dev server's `/dev/` page offers), or `openWithGame(page, sequenceStartingWith(...))` for a one-off draw order. Locators live in `ui(page)`. Add a scenario when a game set-up is useful by hand too; `tests/unit/scenarios.test.js` checks each does what its description says.
+- `dev/` is served by `scripts/serve.js` only, never by nginx, so it must not be needed by the app. `tests/e2e/dev-scenarios.spec.js` skips when `BASE_URL` is set.
+- Speech is stubbed with `stubSpeech(page)` from `helpers.js`: utterances never end by themselves (`window.finishSpeaking()` ends one), and `window.speech` records what was said and cut off.
 - Timer tests: `page.clock.install()` then `page.clock.pauseAt(...)`. An installed clock still ticks in real time until paused, which made tests flaky under load.
-- Browser APIs that can't run headless (Wake Lock, and speech for #4) are stubbed with `page.addInitScript`, and the test asserts what the app asked for.
+- Browser APIs that can't run headless (Wake Lock, speech) are stubbed with `page.addInitScript`, and the test asserts what the app asked for.
 - `tests/e2e/container.spec.js` only runs when `BASE_URL` is set (headers, `/healthz`, `config.json`, no CSP errors).
 - Keep coverage where it is: 100% lines for the logic modules (enforced in CI) and 100% of `app.js` lines via `npm run test:e2e:coverage` (checked by hand). For a new test of a guard or edge case, break the code once and watch the test fail.
 
@@ -56,4 +59,4 @@ In cloud sessions Firefox usually can't be downloaded (`cdn.playwright.dev` is b
 
 ## Open work
 
-- #4 Voice calling: Web Speech API, off by default, `M`, traditional reading unless `calls.json` has a call; plus the README Mac voice-setup section.
+No open issues. Ideas for later are listed under "Future ideas" in `PLAN.md`.
