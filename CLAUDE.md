@@ -54,6 +54,8 @@ In cloud sessions Firefox usually can't be downloaded (`cdn.playwright.dev` is b
 ## Workflow
 
 - One branch and PR per issue, into `main`; CI must be green (unit with thresholds, then e2e on the dev server and on the hardened container, both browsers).
+- Merge only once CI has finished green on the PR, e.g. `gh pr checks <n> --watch --fail-fast && gh pr merge <n> --merge`.
+- After a merge, check the CI run on `main` as well, and treat a red `main` as the next job. A merge can fail where its PR passed: run 6 failed intermittently in the container job on code that had passed on the PR.
 - Before pushing: `npm run test:unit:coverage`, `npm run test:e2e`, and for Docker or nginx changes `docker compose up -d --build` plus the e2e run against it.
 - Update `README.md` for anything a user sets up or sees, and `PLAN.md` when a design decision changes.
 
