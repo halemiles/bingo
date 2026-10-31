@@ -6,6 +6,7 @@ A self-hosted 90-ball bingo caller for the browser, designed to be shown on a TV
 - **Auto**: draws a ball every few seconds; drag the slider to change the pace.
 - **House calls**: numbers with a nickname show it under the ball ("Two fat ladies 88"), ready to read aloud.
 - **Prizes**: plays for 1 line, then 2 lines, then a full house, with a banner across the top saying which, and a checker for claims.
+- **History**: every ball, prize change, claim check and undo in order, with a plain-text download, for settling a dispute.
 - **Voice** (optional, off by default): reads each ball aloud with the laptop's own voices. Nothing is sent off the device.
 - No backend, no accounts, no external requests. The game is saved in the browser, so a refresh or crash picks up where you left off.
 
@@ -34,6 +35,7 @@ npm start
 | `C`     | Check a claim                        |
 | `N`     | Move on to the next prize            |
 | `M`     | Turn the voice on / off              |
+| `H`     | Show the game history                |
 | `F`     | Toggle fullscreen                    |
 
 - `Space` always releases a ball, whatever has focus, so it's hard to press the wrong thing.
@@ -50,6 +52,17 @@ When someone shouts, press **Check claim** (or `C`). Auto mode pauses. Type or p
 - **Not yet** names the numbers that haven't been called and marks them with a dashed outline.
 - **Check another** checks the next person's ticket for the same prize, for shared wins. **Next stage** appears after a win.
 - After a **full house** you're offered a new game (it still asks first), but you can close the box and carry on.
+
+### Game history
+
+Press `H`, or click the "37 / 90 called" count at the bottom, to see everything that has happened this game, oldest first and scrolled to the newest:
+
+- each ball in the order it came out, with its place in the draw (the 31st ball, and so on)
+- each move to the next prize ("Now playing for 2 lines")
+- each claim checked, with the numbers entered and the result, including "Complete since 88, 2 balls ago" for a late one
+- each undo ("Ball 61 undone: back in the machine"), so the record shows what really happened rather than quietly rewriting it
+
+**Download** saves the same thing as a text file (`bingo-2026-10-31-1942.txt`) you can keep, print or send to someone who wasn't there. The history is saved with the game, so it survives a refresh; **New game** starts a fresh one, so download first if you want a copy.
 
 ### Voice
 
@@ -138,6 +151,7 @@ public/
   app.js         UI: rendering, auto timer, voice, keyboard, persistence
   game.js        Pure game logic (shuffle, draw, undo, prize stages)
   claims.js      Pure claim checking (parse a ticket, check it against the draw)
+  history.js     Pure: the game log as a timeline and as a text file
   speech-text.js Pure: what the voice says for a ball
   voices.js      Pure: which voices to offer, and the default
   calls.js       Loads and validates data/calls.json

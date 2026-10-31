@@ -17,10 +17,12 @@ import {
   nextStage,
   isLastStage,
   restoreGame,
+  recordClaim,
 } from '../../public/game.js';
 
 const oneToNinety = Array.from({ length: TOTAL_BALLS }, (_, i) => i + 1);
-const inOrder = () => ({ sequence: [...oneToNinety], drawnCount: 0, stage: 0 });
+const inOrder = () => ({ sequence: [...oneToNinety], drawnCount: 0, stage: 0, log: [] });
+const ballsLog = (...balls) => balls.map((ball) => ({ type: 'ball', ball }));
 const drawN = (state, n) => {
   for (let i = 0; i < n; i++) state = draw(state);
   return state;
@@ -175,14 +177,14 @@ test('setStage picks a stage directly, ignoring anything out of range', () => {
   for (const bad of [-1, 3, 1.5, '1', null]) assert.equal(setStage(state, bad), state, String(bad));
 });
 
-test('restoreGame keeps a saved stage', () => {
-  const saved = { sequence: oneToNinety, drawnCount: 12, stage: 2 };
-  assert.deepEqual(restoreGame(saved), saved);
+test('restoreGame keeps a saved game as it is', () => {
+  const saved = nextStage(nextStage(drawN(inOrder(), 12)));
+  assert.deepEqual(restoreGame(JSON.parse(JSON.stringify(saved))), saved);
 });
 
 test('restoreGame loads a game saved before stages existed at 1 line', () => {
-  const restored = restoreGame({ sequence: oneToNinety, drawnCount: 12 });
-  assert.deepEqual(restored, { sequence: oneToNinety, drawnCount: 12, stage: 0 });
+  const restored = restoreGame({ sequence: oneToNinety, drawnCount: 3 });
+  assert.deepEqual(restored, { sequence: oneToNinety, drawnCount: 3, stage: 0, log: ballsLog(1, 2, 3) });
 });
 
 test('restoreGame keeps the balls when the saved stage makes no sense', () => {
@@ -200,5 +202,92 @@ test('restoreGame rejects a save that is not a valid game, and drops unknown fie
     'sequence',
     'drawnCount',
     'stage',
+    'log',
   ]);
+});
+
+test('newGame starts with an empty log', () => {
+  assert.deepEqual(newGame().log, []);
+});
+
+test('the log records balls, undos and stage changes in order', () => {
+  let state = drawN(inOrder(), 2);
+  state = nextStage(state);
+  state = undo(state);
+  state = draw(state);
+  assert.deepEqual(state.log, [
+    { type: 'ball', ball: 1 },
+    { type: 'ball', ball: 2 },
+    { type: 'stage', stage: 1 },
+    { type: 'undo', ball: 2 },
+    { type: 'ball', ball: 2 },
+  ]);
+});
+
+test('moves that change nothing add nothing to the log', () => {
+  const start = inOrder();
+  assert.equal(undo(start), start);
+  assert.equal(setStage(start, 0), start);
+  const finished = drawN(inOrder(), TOTAL_BALLS);
+  assert.equal(draw(finished), finished);
+  assert.equal(finished.log.length, TOTAL_BALLS);
+});
+
+test('the log copes with a state that has none yet', () => {
+  const { log, ...noLog } = inOrder();
+  assert.deepEqual(draw(noLog).log, ballsLog(1));
+});
+
+test('recordClaim notes the numbers, the result and the stage', () => {
+  const state = nextStage(drawN(inOrder(), 5));
+  const result = { won: false, missing: [7], completedBy: null, ballsAgo: null };
+  const after = recordClaim(state, [[1, 2, 3, 4, 7]], result);
+  assert.deepEqual(after.log.at(-1), { type: 'claim', stage: 1, lines: [[1, 2, 3, 4, 7]], ...result });
+  assert.equal(after.drawnCount, 5);
+  assert.equal(state.log.length, 6, 'previous state untouched');
+});
+
+test('restoreGame keeps claim entries, late wins included', () => {
+  const won = { won: true, missing: [], completedBy: 5, ballsAgo: 2 };
+  const saved = recordClaim(drawN(inOrder(), 7), [[1, 2, 3, 4, 5]], won);
+  assert.deepEqual(restoreGame(JSON.parse(JSON.stringify(saved))).log.at(-1).completedBy, 5);
+});
+
+test('restoreGame drops log entries that make no sense but keeps the rest', () => {
+  const log = [
+    ...ballsLog(1, 2),
+    { type: 'stage', stage: 1 },
+    { type: 'stage', stage: 9 },
+    { type: 'claim', stage: 1, lines: [[1, 2, 'x']], won: false, missing: [], completedBy: null, ballsAgo: null },
+    { type: 'claim', stage: 1, lines: [[1, 2]], won: 'yes', missing: [], completedBy: null, ballsAgo: null },
+    { type: 'claim', stage: 1, lines: [[1, 2]], won: true, missing: [], completedBy: 99, ballsAgo: 0 },
+    { type: 'claim', stage: 1, lines: [[1, 2]], won: true, missing: [], completedBy: 2, ballsAgo: -1 },
+    { type: 'claim', stage: 1, lines: 'nope', won: true, missing: [], completedBy: 2, ballsAgo: 0 },
+    { type: 'mystery' },
+    null,
+    'ball',
+  ];
+  const restored = restoreGame({ sequence: oneToNinety, drawnCount: 2, stage: 1, log });
+  assert.deepEqual(restored.log, [...ballsLog(1, 2), { type: 'stage', stage: 1 }]);
+});
+
+test('restoreGame rebuilds a log that does not match the balls', () => {
+  const rebuilt = ballsLog(1, 2, 3);
+  const cases = [
+    ballsLog(1, 2), // too few
+    ballsLog(1, 3, 2), // wrong order
+    [...ballsLog(1, 2, 3), { type: 'undo', ball: 1 }], // undoes a ball that wasn't last
+    [{ type: 'undo', ball: 1 }, ...ballsLog(1, 2, 3)], // undoes before anything was drawn
+    'not a list',
+    undefined,
+  ];
+  for (const log of cases) {
+    const restored = restoreGame({ sequence: oneToNinety, drawnCount: 3, log });
+    assert.deepEqual(restored.log, rebuilt, JSON.stringify(log));
+  }
+});
+
+test('restoreGame accepts a log with undos that replays to the balls drawn', () => {
+  const log = [...ballsLog(1, 2), { type: 'undo', ball: 2 }, ...ballsLog(2, 3)];
+  assert.deepEqual(restoreGame({ sequence: oneToNinety, drawnCount: 3, log }).log, log);
 });

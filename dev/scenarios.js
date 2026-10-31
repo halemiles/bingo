@@ -24,6 +24,26 @@ export const TICKET = [
 
 const game = (first, drawnCount, stage = 0) => ({ sequence: sequenceStartingWith(...first), drawnCount, stage });
 
+const balls = (...numbers) => numbers.map((ball) => ({ type: 'ball', ball }));
+
+// A game with a bit of everything in its history: a late 1-line win, the
+// move to 2 lines, a ball undone and drawn again, and a 2-line claim that
+// isn't there yet.
+const historySample = {
+  sequence: sequenceStartingWith(...TICKET[0], 70, 71, 7, 19, 32),
+  drawnCount: 10,
+  stage: 1,
+  log: [
+    ...balls(...TICKET[0], 70, 71),
+    { type: 'claim', stage: 0, lines: [TICKET[0]], won: true, missing: [], completedBy: 88, ballsAgo: 2 },
+    { type: 'stage', stage: 1 },
+    ...balls(7, 19),
+    { type: 'undo', ball: 19 },
+    ...balls(19, 32),
+    { type: 'claim', stage: 1, lines: TICKET.slice(0, 2), won: false, missing: [50, 77], completedBy: null, ballsAgo: null },
+  ],
+};
+
 // `game` is what's saved under GAME_KEY; null clears the saved game.
 // `claim` lists ticket lines to type into the claim checker, where useful.
 export const SCENARIOS = [
@@ -74,6 +94,12 @@ export const SCENARIOS = [
     claim: TICKET,
   },
   {
+    id: 'history-sample',
+    title: 'A game with some history',
+    description: 'Ten balls in: a late 1-line win, the move to 2 lines, a ball undone, and a 2-line claim not there yet. Press H.',
+    game: historySample,
+  },
+  {
     id: 'last-ball',
     title: 'Last ball',
     description: '89 balls out; the next one ends the game.',
@@ -82,7 +108,7 @@ export const SCENARIOS = [
   {
     id: 'old-save',
     title: 'Game saved by an older version',
-    description: 'A save from before prize stages existed (no stage field). It should load at 1 line.',
+    description: 'A save from before prize stages and history (no stage or log). It loads at 1 line, with the balls as its history.',
     game: { sequence: sequenceStartingWith(88, 47, 12), drawnCount: 3 },
   },
   {
