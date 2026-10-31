@@ -26,9 +26,21 @@ test('parseConfig falls back to defaults for an inconsistent config', () => {
   for (const value of bad) assert.deepEqual(parseConfig(value, silent), DEFAULT_CONFIG, JSON.stringify(value));
 });
 
-test('loadConfig uses defaults when config.json is absent', async () => {
+test('loadConfig reads and validates config.json', async () => {
+  const body = { autoMinSeconds: 2, autoMaxSeconds: 20, autoDefaultSeconds: 6, autoStepSeconds: 2 };
+  const ok = async () => ({ ok: true, json: async () => body });
+  assert.deepEqual(await loadConfig('x', ok), body);
+});
+
+test('loadConfig uses defaults when config.json is absent, broken or unreachable', async () => {
   const missing = async () => ({ ok: false });
-  assert.deepEqual(await loadConfig('x', missing), DEFAULT_CONFIG);
+  const broken = async () => ({ ok: true, json: async () => JSON.parse('{oops') });
+  const offline = async () => {
+    throw new TypeError('network down');
+  };
+  for (const fetchImpl of [missing, broken, offline]) {
+    assert.deepEqual(await loadConfig('x', fetchImpl), DEFAULT_CONFIG);
+  }
 });
 
 test('clampSpeed keeps a remembered speed inside the configured range', () => {

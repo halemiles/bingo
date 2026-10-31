@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { open, openWithGame, sequenceStartingWith, ui, expectRecent } from './helpers.js';
 
 test('a fresh game shows an empty ball, a hint and a clear board', async ({ page }) => {

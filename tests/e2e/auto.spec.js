@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { open, openWithGame, sequenceStartingWith, ui, SPEED_KEY } from './helpers.js';
 
 // Playwright's fake clock means these run instantly instead of waiting
@@ -85,6 +85,30 @@ test('after a reload, auto mode is paused', async ({ page }) => {
   await expect($.auto).toHaveAttribute('aria-pressed', 'false');
   await page.clock.runFor(20_000);
   await expect($.currentBall).toHaveText('1');
+});
+
+test('the countdown counts down to the next ball', async ({ page }) => {
+  await openWithGame(page, sequenceStartingWith(1, 2));
+  const $ = ui(page);
+  await $.auto.click();
+  await expect($.countdown).toContainText('Next in 5s');
+  await page.clock.runFor(2_000);
+  await expect($.countdown).toContainText('Next in 3s');
+});
+
+test('opening a confirmation pauses auto, so no ball is drawn behind it', async ({ page }) => {
+  await openWithGame(page, sequenceStartingWith(1, 2, 3));
+  const $ = ui(page);
+  await $.auto.click();
+  await page.clock.runFor(5_100);
+  await expect($.currentBall).toHaveText('1');
+
+  await $.undo.click();
+  await expect($.auto).toHaveAttribute('aria-pressed', 'false');
+  await page.clock.runFor(20_000);
+  await $.dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect($.currentBall).toHaveText('1');
+  await expect($.count).toHaveText('1 / 90 called');
 });
 
 test('a remembered speed outside the configured range is clamped', async ({ page }) => {

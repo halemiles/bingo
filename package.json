@@ -10,7 +10,9 @@
     "start": "node scripts/serve.js",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
-    "test:e2e": "playwright test"
+    "test:unit:coverage": "node --test --experimental-test-coverage --test-coverage-include=\"public/**\" --test-coverage-lines=100 --test-coverage-functions=100 --test-coverage-branches=95 \"tests/unit/**/*.test.js\"",
+    "test:e2e": "playwright test",
+    "test:e2e:coverage": "node scripts/e2e-coverage.js clean && COVERAGE=1 playwright test --project=chromium && node scripts/e2e-coverage.js"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
