@@ -1,14 +1,10 @@
 import { expect } from '@playwright/test';
+import { GAME_KEY, findScenario, sequenceStartingWith } from '../../dev/scenarios.js';
 
-export const GAME_KEY = 'bingo.game.v1';
+// The draw-order helper and scenarios are shared with the dev server's
+// /dev/ page, so a test and a manual check can set up the same game.
+export { GAME_KEY, sequenceStartingWith };
 export const SPEED_KEY = 'bingo.speedSeconds.v1';
-
-// A known draw order: `first` comes out in that order, then the rest ascending.
-export function sequenceStartingWith(...first) {
-  const rest = [];
-  for (let n = 1; n <= 90; n++) if (!first.includes(n)) rest.push(n);
-  return [...first, ...rest];
-}
 
 export async function open(page) {
   await page.goto('/');
@@ -24,6 +20,18 @@ export async function openWithGame(page, sequence, drawnCount = 0, extra = {}) {
     GAME_KEY,
     { sequence, drawnCount, ...extra },
   ]);
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
+}
+
+// Loads the app with one of the scenarios from dev/scenarios.js.
+export async function openScenario(page, id) {
+  const { game } = findScenario(id);
+  await open(page);
+  await page.evaluate(([key, value]) => {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  }, [GAME_KEY, game]);
   await page.reload();
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
 }
@@ -48,6 +56,8 @@ export function ui(page) {
     stagePicker: page.getByTestId('stage-picker'),
     nextStage: page.locator('#next-stage'),
     check: page.locator('#check'),
+    voice: page.locator('#voice'),
+    voicePicker: page.getByTestId('voice-picker'),
   };
 }
 
@@ -86,3 +96,66 @@ export async function expectRecent(page, numbers) {
   const texts = await ui(page).recent.allTextContents();
   expect(texts.map((t) => t.trim())).toEqual([...numbers.map(String), ...Array(3 - numbers.length).fill('')]);
 }
+
+// Voices like a Mac's in Chrome: local ones plus a network one to be hidden.
+export const TEST_VOICES = [
+  { name: 'Samantha', lang: 'en-US', localService: true, voiceURI: 'samantha', default: true },
+  { name: 'Google UK English Male', lang: 'en-GB', localService: false, voiceURI: 'google-uk', default: false },
+  { name: 'Daniel', lang: 'en-GB', localService: true, voiceURI: 'daniel', default: false },
+  { name: 'Kate', lang: 'en-GB', localService: true, voiceURI: 'kate', default: false },
+];
+
+// Replaces the Web Speech API, which can't run headless, with a stub that
+// records what the app asked for. In the page:
+//   window.speech.spoken       [{ text, voice, lang, rate }] in order
+//   window.speech.interrupted  texts cut short by cancel()
+//   window.finishSpeaking()    the current utterance ends normally
+//   window.loadVoices()        voices arrive late (with { late: true })
+// Utterances never end by themselves, so a test controls when speech is done.
+export async function stubSpeech(page, { voices = TEST_VOICES, late = false } = {}) {
+  await page.addInitScript(
+    ({ voices, late }) => {
+      const record = { spoken: [], interrupted: [], current: null, voices: late ? [] : voices };
+      window.speech = record;
+
+      class Utterance extends EventTarget {
+        constructor(text) {
+          super();
+          Object.assign(this, { text, voice: null, lang: '', rate: 1 });
+        }
+      }
+      const synth = new EventTarget();
+      const finish = (type) => {
+        const utterance = record.current;
+        record.current = null;
+        synth.speaking = false;
+        if (type === 'error') record.interrupted.push(utterance.text);
+        utterance.dispatchEvent(new Event(type));
+      };
+      Object.assign(synth, {
+        speaking: false,
+        pending: false,
+        getVoices: () => record.voices,
+        speak(utterance) {
+          const { text, voice, lang, rate } = utterance;
+          record.spoken.push({ text, voice: voice?.name ?? null, lang, rate });
+          record.current = utterance;
+          synth.speaking = true;
+        },
+        cancel() {
+          if (record.current) finish('error');
+        },
+      });
+      window.finishSpeaking = () => finish('end');
+      window.loadVoices = () => {
+        record.voices = voices;
+        synth.dispatchEvent(new Event('voiceschanged'));
+      };
+      Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => synth });
+      Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, writable: true, value: Utterance });
+    },
+    { voices, late },
+  );
+}
+
+export const spoken = (page) => page.evaluate(() => window.speech.spoken.map((s) => s.text));

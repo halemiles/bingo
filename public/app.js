@@ -1,5 +1,5 @@
-// UI wiring: renders game state, runs the auto timer, handles input and
-// persistence. Game rules live in game.js.
+// UI wiring: renders game state, runs the auto timer, speaks the balls,
+// handles input and persistence. Game rules live in game.js.
 
 import {
   TOTAL_BALLS,
@@ -18,20 +18,33 @@ import {
   restoreGame,
 } from './game.js';
 import { NUMBERS_PER_LINE, parseClaim, checkClaim, describeResult } from './claims.js';
+import { spokenText } from './speech-text.js';
+import { localVoices, chooseVoice, voiceLabel } from './voices.js';
 import { loadCalls } from './calls.js';
 import { loadConfig, clampSpeed } from './config.js';
 
 const STORAGE_KEYS = {
   game: 'bingo.game.v1',
   speed: 'bingo.speedSeconds.v1',
+  voiceOn: 'bingo.voiceOn.v1',
+  voiceURI: 'bingo.voiceURI.v1',
 };
 const CURSOR_HIDE_MS = 3000;
+// Auto mode waits for the voice to finish, but never longer than this, in
+// case the browser doesn't say it's done.
+const SPEECH_TIMEOUT_MS = 8000;
+// A touch slower than normal, for a room.
+const SPEECH_RATE = 0.9;
 // Shown greyed out in an empty claim box, one made-up ticket line per row.
 const EXAMPLE_LINES = ['4 23 45 61 88', '7 19 32 50 77', '2 16 38 64 81'];
 const COUNTDOWN_REFRESH_MS = 100;
 
 const $ = (id) => document.getElementById(id);
 const el = {
+  voiceControls: $('voice-controls'),
+  voice: $('voice'),
+  voicePickerWrap: $('voice-picker-wrap'),
+  voicePicker: $('voice-picker'),
   stageBanner: $('stage-banner'),
   stageName: $('stage-name'),
   nextStage: $('next-stage'),
@@ -222,8 +235,11 @@ function releaseBall() {
   setState(draw(state));
   restartAnimation(el.currentBall, 'pop');
   announce();
+  const speaking = speakBall(currentBall(state));
   if (auto.running) {
+    // The last ball stops auto but is still said in full.
     if (isFinished(state)) stopAuto();
+    else if (speaking) waitThenSchedule(speaking);
     else scheduleNextBall();
   }
 }
@@ -231,6 +247,7 @@ function releaseBall() {
 async function undoBall() {
   if (state.drawnCount === 0) return;
   stopAuto();
+  stopSpeaking();
   const ball = currentBall(state);
   if (await confirmAction(`Undo ball ${ball}? It goes back in the machine.`, 'Undo')) {
     setState(undo(state));
@@ -240,6 +257,7 @@ async function undoBall() {
 async function startNewGame() {
   if (state.drawnCount === 0) return;
   stopAuto();
+  stopSpeaking();
   if (await confirmAction('Start a new game? All called balls will be cleared.', 'New game')) {
     setState(newGame());
   }
@@ -364,14 +382,30 @@ function closeClaimThen(action) {
 
 // ---------- Auto mode ----------
 
-const auto = { running: false, timer: null, ticker: null, nextAt: 0, intervalMs: 0 };
+// `waiting` is true while the voice is still saying the last ball. `turn`
+// counts schedules, so a voice that finishes after auto was paused, or after
+// another ball was released, can't start a stale countdown.
+const auto = { running: false, timer: null, ticker: null, nextAt: 0, intervalMs: 0, waiting: false, turn: 0 };
 
 function scheduleNextBall() {
   clearTimeout(auto.timer);
+  auto.turn++;
+  auto.waiting = false;
   auto.intervalMs = speedSeconds * 1000;
   auto.nextAt = Date.now() + auto.intervalMs;
   auto.timer = setTimeout(releaseBall, auto.intervalMs);
   renderCountdown();
+}
+
+// The countdown to the next ball starts once the voice has finished.
+function waitThenSchedule(speaking) {
+  clearTimeout(auto.timer);
+  const turn = ++auto.turn;
+  auto.waiting = true;
+  renderCountdown();
+  speaking.then(() => {
+    if (auto.running && turn === auto.turn) scheduleNextBall();
+  });
 }
 
 function startAuto() {
@@ -386,14 +420,19 @@ function startAuto() {
 function stopAuto() {
   if (!auto.running) return;
   auto.running = false;
+  auto.turn++;
   clearTimeout(auto.timer);
   clearInterval(auto.ticker);
   renderAuto();
 }
 
 function toggleAuto() {
-  if (auto.running) stopAuto();
-  else startAuto();
+  if (auto.running) {
+    stopAuto();
+    stopSpeaking();
+  } else {
+    startAuto();
+  }
 }
 
 function renderAuto() {
@@ -404,6 +443,11 @@ function renderAuto() {
 
 function renderCountdown() {
   if (!auto.running) return;
+  if (auto.waiting) {
+    el.countdown.style.setProperty('--progress', '0');
+    el.countdownText.textContent = 'Speaking…';
+    return;
+  }
   const remainingMs = Math.max(auto.nextAt - Date.now(), 0);
   el.countdown.style.setProperty('--progress', String(1 - remainingMs / auto.intervalMs));
   el.countdownText.textContent = `Next in ${Math.ceil(remainingMs / 1000)}s`;
@@ -415,6 +459,88 @@ function setSpeed(seconds, { save = true } = {}) {
   el.speedValue.textContent = `${speedSeconds}s`;
   if (save) writeStorage(STORAGE_KEYS.speed, speedSeconds);
   // A new speed applies from the next ball; the current countdown finishes as is.
+}
+
+// ---------- Voice ----------
+
+// Off by default, so the child caller stays the star. Uses the browser's
+// own speech (Web Speech API): nothing is sent off the device.
+const voice = {
+  supported:
+    typeof window.speechSynthesis?.speak === 'function' && typeof window.SpeechSynthesisUtterance === 'function',
+  on: false,
+  voices: [], // the local voices offered in the picker
+  chosen: null, // null means the browser's default voice
+};
+
+function initVoice() {
+  el.voiceControls.hidden = !voice.supported;
+  if (!voice.supported) return;
+  voice.on = readStorage(STORAGE_KEYS.voiceOn) === true;
+  loadVoices();
+  // Browsers fill in the voice list after the page loads.
+  speechSynthesis.addEventListener('voiceschanged', loadVoices);
+}
+
+function loadVoices() {
+  voice.voices = localVoices(speechSynthesis.getVoices());
+  voice.chosen = chooseVoice(voice.voices, readStorage(STORAGE_KEYS.voiceURI));
+  el.voicePicker.replaceChildren(
+    ...voice.voices.map((v) => {
+      const option = document.createElement('option');
+      option.value = v.voiceURI;
+      option.textContent = voiceLabel(v);
+      return option;
+    }),
+  );
+  if (voice.chosen) el.voicePicker.value = voice.chosen.voiceURI;
+  renderVoice();
+}
+
+function renderVoice() {
+  el.voice.setAttribute('aria-pressed', String(voice.on));
+  el.voicePickerWrap.hidden = !voice.on || voice.voices.length === 0;
+}
+
+function toggleVoice() {
+  if (!voice.supported) return;
+  voice.on = !voice.on;
+  writeStorage(STORAGE_KEYS.voiceOn, voice.on);
+  if (!voice.on) stopSpeaking();
+  renderVoice();
+}
+
+function pickVoice() {
+  voice.chosen = voice.voices.find((v) => v.voiceURI === el.voicePicker.value) ?? null;
+  writeStorage(STORAGE_KEYS.voiceURI, el.voicePicker.value);
+  // Hand the keyboard back, so Space releases a ball rather than opening the list.
+  el.voicePicker.blur();
+}
+
+function stopSpeaking() {
+  if (voice.supported) speechSynthesis.cancel();
+}
+
+// Says the ball. Returns a promise that settles once it has been said, or
+// after SPEECH_TIMEOUT_MS if the browser never reports it, or null when the
+// voice is off and there's nothing to wait for.
+function speakBall(ball) {
+  if (!voice.on) return null;
+  if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(spokenText(ball, calls.get(ball)));
+  utterance.lang = voice.chosen?.lang ?? 'en-GB';
+  if (voice.chosen) utterance.voice = voice.chosen;
+  utterance.rate = SPEECH_RATE;
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, SPEECH_TIMEOUT_MS);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    utterance.addEventListener('end', done);
+    utterance.addEventListener('error', done);
+    speechSynthesis.speak(utterance);
+  });
 }
 
 // ---------- Dialogs ----------
@@ -502,7 +628,9 @@ function onKeyDown(event) {
     return;
   }
   if (event.repeat) return;
-  const action = { a: toggleAuto, f: toggleFullscreen, c: openClaim, n: advanceStage }[event.key.toLowerCase()];
+  const action = { a: toggleAuto, f: toggleFullscreen, c: openClaim, n: advanceStage, m: toggleVoice }[
+    event.key.toLowerCase()
+  ];
   if (!action) return;
   // Stops the C that opened the claim box being typed into it.
   event.preventDefault();
@@ -524,6 +652,8 @@ function bindEvents() {
   el.stageBanner.addEventListener('click', pickStage);
   el.nextStage.addEventListener('click', advanceStage);
   el.check.addEventListener('click', openClaim);
+  el.voice.addEventListener('click', toggleVoice);
+  el.voicePicker.addEventListener('change', pickVoice);
 
   el.claimForm.addEventListener('submit', submitClaim);
   el.claimNumbers.addEventListener('keydown', onClaimKeyDown);
@@ -555,6 +685,7 @@ async function init() {
   buildBoard();
   buildRecent();
   buildStagePicker();
+  initVoice();
   // Auto mode is never restored: after a reload it waits for the caller.
   setState(loadGame());
   renderAuto();

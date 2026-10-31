@@ -16,11 +16,12 @@ The caller is a child, so the current ball's text needs to be easy to read aloud
   - **Board** — all 90 numbers in a grid; called numbers highlighted green.
 - **Prize stages**: plays for 1 line → 2 lines → full house, shown in a banner across the top. The caller moves on; it's never automatic.
 - **Claim checker**: type or paste a player's ticket lines and see whether they've won.
+- **Voice calling** (optional, off by default): the browser's own speech reads each ball aloud.
 - Runs entirely in the browser, self-hosted, no accounts, no external calls.
 
 ## Non-goals (for now)
 
-- Voice calling (a human calls the numbers).
+- Voice replacing the caller. It's off by default and there to help, not to take over.
 - Player tickets held in the app / automatic winner detection. The caller checks a claim when someone shouts.
 - Multi-device sync (e.g. phone as remote, TV as display).
 
@@ -38,6 +39,8 @@ bingo/
 │   ├── app.js          # UI wiring: DOM, timers, buttons, keyboard
 │   ├── game.js         # Pure game logic, no DOM — unit-testable
 │   ├── claims.js       # Pure claim checking: parse ticket lines, check vs. draw
+│   ├── speech-text.js  # Pure: what the voice says for a ball
+│   ├── voices.js       # Pure: which voices to offer, and the default
 │   ├── calls.js        # Loads + validates data/calls.json
 │   ├── config.js       # Loads + validates config.json (auto speed)
 │   ├── data/calls.json # The house bingo calls, editable
@@ -45,6 +48,7 @@ bingo/
 ├── docker/
 │   ├── nginx.conf          # security headers, CSP, caching
 │   └── 40-bingo-config.sh  # env vars -> config.json at container start
+├── dev/                # scenario page + shared scenarios (dev server only)
 ├── scripts/serve.js    # zero-dependency dev server (npm start, Playwright)
 ├── tests/
 │   ├── unit/           # node:test, zero deps
@@ -96,7 +100,7 @@ A plain map of number → the exact phrase to read out. Only numbers with a call
 - `compose.yaml` bind-mounts the `public/data/` directory read-only over the bundled copy, so a new call goes live with a browser refresh, with no rebuild. It mounts the directory rather than the single file because many editors save by replacing the file, and a single-file bind mount would keep serving the old copy. Without the mount, the bundled file is used.
 - `calls.js` validates on load: keys must be whole numbers 1–90 and values non-empty strings. Bad entries are skipped with a console warning rather than breaking the game. A missing or malformed file means "no calls", and the game still works.
 - Calls are rendered with `textContent`, never `innerHTML`, so an edited file can't inject markup.
-- When voice is added later, the same phrases feed straight into speech.
+- The same phrases feed straight into the voice (below).
 
 ### Prize stages & checking a claim (`claims.js`)
 
@@ -111,6 +115,19 @@ A game plays for **1 line**, then **2 lines**, then **full house**. The stage is
 - After a result: **Check another** keeps the stage, for shared wins. **Next stage** is offered after a win. After a full house, **New game** is offered (still behind the usual confirmation) but never forced.
 
 The checker trusts the caller to type a real ticket line; it doesn't validate 90-ball ticket structure (column ranges, blanks). That would reject typos less clearly than it helps.
+
+### Voice calling (`speech-text.js`, `voices.js`)
+
+The browser's built-in **Web Speech API** reads each ball aloud. No library, no new dependency, and nothing leaves the device. Target: Firefox on a Mac, with the sound going to the TV over HDMI.
+
+- **Off by default** (`M` or the **Voice** button turns it on; remembered in `localStorage`). The child caller stays the star; voice is a helper.
+- **What it says** (`spokenText`): the `calls.json` phrase exactly if there is one, otherwise the traditional reading: "4 and 7, 47", "5 oh, 50", "Number 5 on his own" (matching the house call for 4), "9 oh, 90". The screen is unchanged. Spoken at rate 0.9, a little slower for a room.
+- **Voices** (`localVoices`, `chooseVoice`): only `localService` voices are offered. Network voices such as Chrome's "Google UK English" send text off the device and fail without Wi-Fi. The default is the best British English voice: Daniel on macOS, preferring a downloaded Premium or Enhanced version. The choice is saved by `voiceURI` and falls back to the default if that voice is uninstalled. Browsers fill in the voice list late, so it's rebuilt on `voiceschanged`.
+- **Auto mode waits for the voice**: after a ball, the countdown shows "Speaking…" and starts when the utterance ends, or after an 8 s limit in case the browser never says so. A "turn" counter stops a voice that finishes late (after a pause, or after another ball was released) from starting a stale countdown.
+- **Stopping**: undo, new game and pausing auto cancel speech. A new ball cuts off the previous one. The 90th ball, which stops auto by itself, is still said in full.
+- **No speech support**: the controls are hidden and everything else works.
+- Browsers only allow speech after a user gesture; `Space` or `A` counts, so nothing extra is needed.
+- The voice controls sit in the header's left column, mirroring Check claim / Next stage on the right; the footer had no room left at 1920 wide. The picker only shows while voice is on. After picking a voice, focus is handed back to the page so `Space` releases a ball rather than reopening the list.
 
 ### Persistence & recovery
 
@@ -135,7 +152,7 @@ State is saved to `localStorage` after every change. A page refresh, browser cra
 Layout:
 
 ```
-             ( Playing for: 1 line )        [Check claim] [Next stage]
+[Voice] [Daniel ▾]   ( Playing for: 1 line )   [Check claim] [Next stage]
 ┌───────────────────────────────┬─────────────────────────────┐
 │                               │  1  2  3  4  5  6  7  8  9 10│
 │          ( 88 )               │ 11 12 13 14 15 16 17 18 19 20│
@@ -155,7 +172,7 @@ Layout:
 - Auto stops automatically when all 90 are drawn.
 - **Prize banner** across the top: "Playing for: 1 line", large enough to read on the TV, with **Check claim** and **Next stage** beside it. Keeping the prize controls together up there also keeps the footer to one row at 1280×720.
 - **New game** and **Undo** require confirmation in an in-page `<dialog>` (an accidental "New game" mid-session is the one catastrophic UX failure here). Cancel has focus by default, so a stray `Space` is harmless. A native `confirm()` would kick the browser out of fullscreen.
-- **Keyboard**: `Space` = release ball, `A` = toggle auto, `C` = check claim, `N` = next stage, `F` = fullscreen. Useful with a clicker/presenter remote. `Space` always releases a ball even when a button has focus, so a child pressing it can't toggle something else by accident.
+- **Keyboard**: `Space` = release ball, `A` = toggle auto, `C` = check claim, `N` = next stage, `M` = voice, `F` = fullscreen. Useful with a clicker/presenter remote. `Space` always releases a ball even when a button has focus, so a child pressing it can't toggle something else by accident.
 - Fullscreen button (Fullscreen API) for TV use.
 - Accessibility: called state isn't conveyed by colour alone (bold + tick/strike style as well as green); `aria-live` region announces the current ball for screen readers.
 
@@ -188,9 +205,11 @@ environment:
 
 ## Testing
 
-- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). Stage moves stop at full house; old saves restore at 1 line. Claims: parsing and every validation message, win, not yet, complete-since. The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
+- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). Stage moves stop at full house; old saves restore at 1 line. Claims: parsing and every validation message, win, not yet, complete-since. Spoken text: house call, two digits, tens, single digits, 90. Voices: network voices hidden, ordering, the Daniel default, the saved choice. Every dev scenario loads and does what its description says. The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
 - **E2E** (Playwright): release ball updates main ball, last-3 and board; a ball with a call shows its phrase, a ball without one shows none (using a seeded sequence so the test knows which ball comes next); a missing `calls.json` doesn't break the game; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; custom speed range from `config.json`; fallback when it is missing; undo; new game confirmation; state survives reload; game ends cleanly at 90.
 - **Prizes** (Playwright): checking at each stage, a shared win (check another), a failed claim, validation errors, pasting, the `C` and `N` keys, picking a stage from the banner, the stage surviving a reload and resetting on a new game, a pre-stages save loading at 1 line.
+- **Voice** (Playwright, speech API stubbed with `page.addInitScript` so tests see what would be said): off by default and remembered when turned on; the right text for a house call and for traditional readings; network voices hidden, Daniel by default, a choice remembered; voices that load late; auto waiting for speech and the 8 s limit; undo, new game and pause cutting speech off; the last ball said in full; no controls without speech support.
+- **Dev scenarios** (Playwright, dev server only): picking a scenario loads its game; the dev server refuses paths outside `public/` and `dev/`.
 - **Hardening for the night** (Playwright): holding `Space` releases one ball; Cmd/Ctrl/Alt shortcuts are left to the browser; shortcuts are ignored while a dialog is open; opening a dialog pauses auto; the layout fits at 1920×1080, 1366×768 and 1280×720; fullscreen and cursor hiding; Wake Lock requested on the first ball and re-requested after loss (stubbed); blocked storage and unparseable saves don't break the game; the screen-reader announcement.
 - **Container only** (`BASE_URL` set): security headers, `/healthz`, rendered `config.json`, and no console or CSP errors during play.
 - **Browsers**: every Playwright test runs in Chromium and Firefox, the browser used on the night.
@@ -210,7 +229,6 @@ All five phases are built.
 
 ## Future ideas
 
-- Voice calling via the browser's built-in Web Speech API (local, no cloud), reading the phrases from `calls.json`.
 - An in-app editor for calls, so the caller can add new ones themselves. It would need somewhere to save them: `localStorage` for one browser, or a small backend for anything shared.
 - Separate **caller** and **display** views — same machine via `BroadcastChannel` (no backend), or across devices via a tiny WebSocket server.
 - Game history / export of the called sequence (useful for verifying a disputed claim).
@@ -223,3 +241,5 @@ All five phases are built.
 - **Auto speed:** 3–15 s, default 5 s, configurable through env vars.
 - **Caller:** a child reads the numbers aloud; the house calls are shown under the current ball, stored as editable data in `calls.json`.
 - **Prizes:** 1 line → 2 lines → full house, moved on by hand only. Claims are typed one ticket line per row; a late claim is noted, not refused.
+- **Voice:** Web Speech API with local voices only, off by default, traditional reading unless `calls.json` has a call; auto waits for it (8 s limit).
+- **Manual testing:** ready-made games on a dev-server-only `/dev/` page, shared with the Playwright tests, never shipped in the image.

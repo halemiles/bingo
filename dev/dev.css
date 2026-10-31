@@ -1,0 +1,46 @@
+body {
+  max-width: 48rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  background: #10121a;
+  color: #f4f5fa;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color-scheme: dark;
+}
+
+.scenarios {
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.scenario {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: #1b1e2a;
+}
+
+.scenario button {
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: #ffd23f;
+  color: #14161f;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scenario p {
+  margin: 0.5rem 0 0;
+  color: #b5bad0;
+}
+
+.scenario pre {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem;
+  border-radius: 0.3rem;
+  background: #10121a;
+}

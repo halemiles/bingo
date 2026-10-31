@@ -11,6 +11,13 @@
   </head>
   <body>
     <header class="prize">
+      <div id="voice-controls" class="prize__voice">
+        <button id="voice" class="btn" type="button" aria-pressed="false">Voice <kbd>M</kbd></button>
+        <label id="voice-picker-wrap" class="voice-picker" hidden>
+          <span class="visually-hidden">Voice to use</span>
+          <select id="voice-picker" data-testid="voice-picker"></select>
+        </label>
+      </div>
       <button id="stage-banner" class="banner" type="button" data-testid="stage-banner" aria-haspopup="dialog">
         <span class="banner__label">Playing for:</span> <span id="stage-name" class="banner__name"></span>
       </button>
