@@ -44,6 +44,9 @@ test('claims, stage changes and undos show where they happened', async ({ page }
   await page.keyboard.press('Space');
   await $.undo.click();
   await $.dialog.getByRole('button', { name: 'Undo' }).click();
+  // The undo lands when the dialog's close event fires, a task after it
+  // shuts; wait to see it rather than racing it with the next key.
+  await expect($.count).toHaveText('5 / 90 called');
 
   await page.keyboard.press('h');
   const h = history(page);
@@ -105,6 +108,7 @@ test('a new game starts with an empty history', async ({ page }) => {
   const $ = ui(page);
   await $.newGame.click();
   await $.dialog.getByRole('button', { name: 'New game' }).click();
+  await expect($.count).toHaveText('0 / 90 called');
   await page.keyboard.press('h');
   await expect(history(page).summary).toHaveText('0 of 90 balls called. Playing for 1 line.');
   await expect(history(page).timeline).toHaveText('No balls called yet.');
