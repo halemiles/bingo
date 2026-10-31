@@ -27,8 +27,15 @@ test('every scenario game loads as it is', () => {
   }
 });
 
-test('the old-save scenario really has no stage', () => {
-  assert.equal('stage' in findScenario('old-save').game, false);
+test('the old-save scenario really has no stage or log', () => {
+  const { game } = findScenario('old-save');
+  assert.equal('stage' in game, false);
+  assert.equal('log' in game, false);
+});
+
+test('the history scenario keeps its whole log when loaded', () => {
+  const { game } = findScenario('history-sample');
+  assert.deepEqual(restoreGame(game).log, game.log);
 });
 
 test('claim scenarios say what their description promises', () => {

@@ -16,7 +16,9 @@ import {
   nextStage,
   isLastStage,
   restoreGame,
+  recordClaim,
 } from './game.js';
+import { timeline, summary, historyText, historyFileName } from './history.js';
 import { NUMBERS_PER_LINE, parseClaim, checkClaim, describeResult } from './claims.js';
 import { spokenText } from './speech-text.js';
 import { localVoices, chooseVoice, voiceLabel } from './voices.js';
@@ -89,6 +91,12 @@ const el = {
   claimAgain: $('claim-again'),
   claimNext: $('claim-next'),
   claimNewGame: $('claim-new-game'),
+  history: $('history'),
+  historyDialog: $('history-dialog'),
+  historySummary: $('history-summary'),
+  historyTimeline: $('history-timeline'),
+  historyDownload: $('history-download'),
+  historyClose: $('history-close'),
 };
 
 let state;
@@ -335,6 +343,8 @@ function submitClaim(event) {
 
 function showClaimResult(lines) {
   const result = checkClaim(lines, state);
+  // Every check goes in the game history, wins and misses alike.
+  setState(recordClaim(state, lines, result));
   const { title, note } = describeResult(result, state.stage);
   el.claimVerdict.textContent = title;
   el.claimVerdict.classList.toggle('is-win', result.won);
@@ -459,6 +469,78 @@ function setSpeed(seconds, { save = true } = {}) {
   el.speedValue.textContent = `${speedSeconds}s`;
   if (save) writeStorage(STORAGE_KEYS.speed, speedSeconds);
   // A new speed applies from the next ball; the current countdown finishes as is.
+}
+
+// ---------- Game history ----------
+
+function openHistory() {
+  stopAuto();
+  renderHistory();
+  showDialog(el.historyDialog, el.historyClose);
+  // Newest at the bottom, where the eye goes after a claim.
+  el.historyTimeline.scrollTop = el.historyTimeline.scrollHeight;
+}
+
+function renderHistory() {
+  el.historySummary.textContent = summary(state);
+  const nodes = [];
+  let balls = null; // the run of balls being added to
+  for (const row of timeline(state)) {
+    if (row.kind === 'ball') {
+      if (!balls) {
+        balls = document.createElement('ol');
+        balls.className = 'history__balls';
+        nodes.push(balls);
+      }
+      const item = document.createElement('li');
+      item.className = 'history__ball';
+      item.dataset.position = String(row.position);
+      item.textContent = String(row.ball);
+      item.setAttribute('aria-label', `Ball ${row.position}: ${row.ball}`);
+      balls.append(item);
+      continue;
+    }
+    balls = null;
+    const event = document.createElement('div');
+    event.className = `history__event history__event--${row.kind}`;
+    const text = document.createElement('p');
+    text.textContent = row.text;
+    event.append(text);
+    if (row.kind === 'claim') {
+      event.classList.toggle('is-win', row.won);
+      if (row.note) text.append(` ${row.note}`);
+      for (const line of row.lines) {
+        const numbers = document.createElement('p');
+        numbers.className = 'history__numbers';
+        numbers.textContent = line.join(' ');
+        event.append(numbers);
+      }
+    }
+    nodes.push(event);
+  }
+  if (nodes.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'history__empty';
+    empty.textContent = 'No balls called yet.';
+    nodes.push(empty);
+  }
+  el.historyTimeline.replaceChildren(...nodes);
+}
+
+// A plain-text copy, saved by the browser like any download. Works over
+// plain http on the LAN, unlike the clipboard.
+function downloadHistory() {
+  const now = new Date();
+  const exportedAt = now.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+  const url = URL.createObjectURL(new Blob([historyText(state, exportedAt)], { type: 'text/plain;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = historyFileName(now);
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // Firefox needs the URL until the download has started.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 // ---------- Voice ----------
@@ -628,7 +710,7 @@ function onKeyDown(event) {
     return;
   }
   if (event.repeat) return;
-  const action = { a: toggleAuto, f: toggleFullscreen, c: openClaim, n: advanceStage, m: toggleVoice }[
+  const action = { a: toggleAuto, f: toggleFullscreen, c: openClaim, n: advanceStage, m: toggleVoice, h: openHistory }[
     event.key.toLowerCase()
   ];
   if (!action) return;
@@ -653,6 +735,8 @@ function bindEvents() {
   el.nextStage.addEventListener('click', advanceStage);
   el.check.addEventListener('click', openClaim);
   el.voice.addEventListener('click', toggleVoice);
+  el.history.addEventListener('click', openHistory);
+  el.historyDownload.addEventListener('click', downloadHistory);
   el.voicePicker.addEventListener('change', pickVoice);
 
   el.claimForm.addEventListener('submit', submitClaim);

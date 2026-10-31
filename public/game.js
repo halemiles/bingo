@@ -4,6 +4,10 @@
 // A game is one shuffled sequence of 1..90 plus how many balls have been
 // drawn from the front of it. Drawing, undoing and restoring after a reload
 // are all just changes to `drawnCount`.
+//
+// `log` records what happened, in order, for the game history: each ball,
+// undo, stage change and claim check. It only ever grows, so an undo shows
+// up as an event rather than quietly rewriting the past.
 
 export const TOTAL_BALLS = 90;
 export const RECENT_COUNT = 3;
@@ -42,17 +46,28 @@ export function shuffledBalls(randomInt = secureRandomInt) {
 }
 
 export function newGame(randomInt = secureRandomInt) {
-  return { sequence: shuffledBalls(randomInt), drawnCount: 0, stage: 0 };
+  return { sequence: shuffledBalls(randomInt), drawnCount: 0, stage: 0, log: [] };
 }
+
+const withEntry = (state, entry) => [...(state.log ?? []), entry];
 
 export function draw(state) {
   if (isFinished(state)) return state;
-  return { ...state, drawnCount: state.drawnCount + 1 };
+  const ball = state.sequence[state.drawnCount];
+  return { ...state, drawnCount: state.drawnCount + 1, log: withEntry(state, { type: 'ball', ball }) };
 }
 
 export function undo(state) {
   if (state.drawnCount === 0) return state;
-  return { ...state, drawnCount: state.drawnCount - 1 };
+  const ball = currentBall(state);
+  return { ...state, drawnCount: state.drawnCount - 1, log: withEntry(state, { type: 'undo', ball }) };
+}
+
+// Notes a checked claim in the log: the numbers entered and what
+// checkClaim (claims.js) made of them, at the stage being played for.
+export function recordClaim(state, lines, { won, missing, completedBy, ballsAgo }) {
+  const entry = { type: 'claim', stage: state.stage, lines, won, missing, completedBy, ballsAgo };
+  return { ...state, log: withEntry(state, entry) };
 }
 
 export function isValidStage(stage) {
@@ -61,7 +76,7 @@ export function isValidStage(stage) {
 
 export function setStage(state, stage) {
   if (!isValidStage(stage) || stage === state.stage) return state;
-  return { ...state, stage };
+  return { ...state, stage, log: withEntry(state, { type: 'stage', stage }) };
 }
 
 export function isLastStage(state) {
@@ -107,11 +122,68 @@ export function isValidState(value) {
   return true;
 }
 
+const isBall = (n) => Number.isInteger(n) && n >= 1 && n <= TOTAL_BALLS;
+const isBallList = (list) => Array.isArray(list) && list.every(isBall);
+
+function isValidLogEntry(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  switch (entry.type) {
+    case 'ball':
+    case 'undo':
+      return isBall(entry.ball);
+    case 'stage':
+      return isValidStage(entry.stage);
+    case 'claim':
+      return (
+        isValidStage(entry.stage) &&
+        Array.isArray(entry.lines) &&
+        entry.lines.every(isBallList) &&
+        typeof entry.won === 'boolean' &&
+        isBallList(entry.missing) &&
+        (entry.completedBy === null || isBall(entry.completedBy)) &&
+        (entry.ballsAgo === null || (Number.isInteger(entry.ballsAgo) && entry.ballsAgo >= 0))
+      );
+    default:
+      return false;
+  }
+}
+
+// Plays the ball and undo entries back. True only if they come out in the
+// sequence's order and end with exactly the balls drawn.
+function logMatchesBalls(log, sequence, drawnCount) {
+  let count = 0;
+  for (const entry of log) {
+    if (entry.type === 'ball') {
+      if (entry.ball !== sequence[count]) return false;
+      count++;
+    } else if (entry.type === 'undo') {
+      if (count === 0 || entry.ball !== sequence[count - 1]) return false;
+      count--;
+    }
+  }
+  return count === drawnCount;
+}
+
+// A saved log is kept if it agrees with the balls, minus any entries that
+// make no sense. Otherwise (a save from before the log existed, or one that
+// was tampered with) the history is rebuilt from the balls alone.
+function restoreLog(log, sequence, drawnCount) {
+  const entries = Array.isArray(log) ? log.filter(isValidLogEntry) : [];
+  if (Array.isArray(log) && logMatchesBalls(entries, sequence, drawnCount)) return entries;
+  return sequence.slice(0, drawnCount).map((ball) => ({ type: 'ball', ball }));
+}
+
 // Turns a saved game back into state, or null if it can't be trusted.
-// Games saved before stages existed (or with a stage that makes no sense)
-// keep their balls and start at the first stage, rather than being lost.
+// Fields added since the first version are defaulted rather than rejected:
+// a missing or nonsense stage starts at 1 line, and a missing or broken log
+// is rebuilt from the balls, so an older save never loses its game.
 export function restoreGame(value) {
   if (!isValidState(value)) return null;
-  const { sequence, drawnCount, stage } = value;
-  return { sequence, drawnCount, stage: isValidStage(stage) ? stage : 0 };
+  const { sequence, drawnCount, stage, log } = value;
+  return {
+    sequence,
+    drawnCount,
+    stage: isValidStage(stage) ? stage : 0,
+    log: restoreLog(log, sequence, drawnCount),
+  };
 }

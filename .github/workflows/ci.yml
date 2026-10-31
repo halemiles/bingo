@@ -1,9 +1,13 @@
 name: CI
 
+# Changes that only touch Markdown (README, PLAN, CLAUDE.md) skip CI.
+# Anything else in the same change still runs it.
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md']
   pull_request:
+    paths-ignore: ['**.md']
   workflow_dispatch:
 
 permissions:
@@ -77,8 +81,11 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8080
 
-      - if: failure()
-        run: docker logs bingo
+      # Only nginx errors and unusual requests: the full access log is
+      # thousands of 200/304 lines that bury the Playwright failures above.
+      - name: Container log (errors and unusual requests)
+        if: failure()
+        run: docker logs bingo 2>&1 | { grep -vE '"(GET|HEAD) [^"]*" (200|304) ' || true; } | tail -n 200
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

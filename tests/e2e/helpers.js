@@ -58,6 +58,21 @@ export function ui(page) {
     check: page.locator('#check'),
     voice: page.locator('#voice'),
     voicePicker: page.getByTestId('voice-picker'),
+    historyButton: page.locator('#history'),
+  };
+}
+
+// The game history dialog.
+export function history(page) {
+  const dialog = page.getByTestId('history');
+  return {
+    dialog,
+    summary: page.getByTestId('history-summary'),
+    timeline: page.getByTestId('history-timeline'),
+    balls: page.getByTestId('history-timeline').locator('li.history__ball'),
+    events: page.getByTestId('history-timeline').locator('.history__event'),
+    download: dialog.getByRole('button', { name: 'Download' }),
+    close: dialog.getByRole('button', { name: 'Close' }),
   };
 }
 

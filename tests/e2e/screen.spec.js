@@ -1,7 +1,7 @@
 // The TV setup: everything fits without scrolling, fullscreen, cursor
 // hiding, keeping the screen awake, and surviving blocked storage.
 import { test, expect } from './fixtures.js';
-import { open, openWithGame, sequenceStartingWith, ui, claim, checkClaim, stubSpeech, TEST_VOICES } from './helpers.js';
+import { open, openWithGame, openScenario, sequenceStartingWith, ui, claim, checkClaim, history, stubSpeech, TEST_VOICES } from './helpers.js';
 
 async function expectOnScreen(locators, viewport) {
   for (const locator of locators) {
@@ -31,7 +31,7 @@ for (const viewport of [
     await page.keyboard.press('m');
     await expect($.voicePicker).toBeVisible();
     await expectOnScreen(
-      [$.voice, $.voicePicker, $.stageBanner, $.check, $.nextStage, $.currentBall, $.currentCall, $.recent.last(), $.cell(1), $.cell(90), $.release, $.newGame],
+      [$.voice, $.voicePicker, $.stageBanner, $.check, $.nextStage, $.currentBall, $.currentCall, $.recent.last(), $.cell(1), $.cell(90), $.release, $.historyButton, $.newGame],
       viewport,
     );
     // The voice controls stay clear of the banner.
@@ -40,6 +40,17 @@ for (const viewport of [
     // The banner sits above the game, clear of the board.
     const banner = await $.stageBanner.boundingBox();
     expect(banner.y + banner.height).toBeLessThanOrEqual((await $.cell(1).boundingBox()).y);
+  });
+
+  test(`a full game's history fits on a ${viewport.width}x${viewport.height} screen`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await openScenario(page, 'last-ball');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('h');
+    const h = history(page);
+    await expect(h.balls).toHaveCount(90);
+    // The list scrolls inside the dialog; the dialog itself stays on screen.
+    await expectOnScreen([h.summary, h.timeline, h.download, h.close], viewport);
   });
 
   test(`a full house claim fits on a ${viewport.width}x${viewport.height} screen`, async ({ page }) => {

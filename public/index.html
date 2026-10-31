@@ -66,7 +66,9 @@
         <span id="countdown-text"></span>
       </div>
 
-      <span id="count" class="count" data-testid="count"></span>
+      <button id="history" class="btn btn--quiet count" type="button" aria-haspopup="dialog" title="Game history">
+        <span id="count" data-testid="count"></span> <kbd>H</kbd>
+      </button>
 
       <span class="spacer"></span>
 
@@ -123,6 +125,18 @@
             <button id="claim-next" class="btn btn--primary" type="button" hidden>Next stage</button>
             <button id="claim-new-game" class="btn btn--primary" type="button" hidden>New game</button>
           </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="history-dialog" class="dialog dialog--wide" aria-labelledby="history-title" data-testid="history">
+      <form method="dialog" class="history">
+        <h2 id="history-title" class="dialog__message">Game history</h2>
+        <p id="history-summary" class="history__summary" data-testid="history-summary"></p>
+        <div id="history-timeline" class="history__timeline" data-testid="history-timeline" tabindex="0" aria-label="Everything that has happened this game, oldest first"></div>
+        <div class="dialog__actions">
+          <button id="history-download" class="btn" type="button">Download</button>
+          <button id="history-close" class="btn btn--primary" value="close">Close</button>
         </div>
       </form>
     </dialog>

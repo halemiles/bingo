@@ -16,6 +16,7 @@ The caller is a child, so the current ball's text needs to be easy to read aloud
   - **Board** — all 90 numbers in a grid; called numbers highlighted green.
 - **Prize stages**: plays for 1 line → 2 lines → full house, shown in a banner across the top. The caller moves on; it's never automatic.
 - **Claim checker**: type or paste a player's ticket lines and see whether they've won.
+- **Game history**: everything that happened this game, in order, with a text download.
 - **Voice calling** (optional, off by default): the browser's own speech reads each ball aloud.
 - Runs entirely in the browser, self-hosted, no accounts, no external calls.
 
@@ -39,6 +40,7 @@ bingo/
 │   ├── app.js          # UI wiring: DOM, timers, buttons, keyboard
 │   ├── game.js         # Pure game logic, no DOM — unit-testable
 │   ├── claims.js       # Pure claim checking: parse ticket lines, check vs. draw
+│   ├── history.js      # Pure: the game log as a timeline and as a text file
 │   ├── speech-text.js  # Pure: what the voice says for a ball
 │   ├── voices.js       # Pure: which voices to offer, and the default
 │   ├── calls.js        # Loads + validates data/calls.json
@@ -67,6 +69,7 @@ state = {
   sequence: [/* 90 numbers, shuffled at game start */],
   drawnCount: 0,
   stage: 0, // index into STAGES: 0 = 1 line, 1 = 2 lines, 2 = full house
+  log: [],  // what happened, in order (see Game history)
 }
 ```
 
@@ -75,7 +78,7 @@ state = {
 - `undo(state)` — steps back one ball (for mis-clicks).
 - Derived views: `currentBall`, `recentBalls`, `calledBalls`, `isFinished`.
 - `nextStage(state)` / `setStage(state, i)` — move between prizes; `newGame()` starts at 1 line.
-- `restoreGame(saved)` — validates a save and defaults `stage` to 0 when it's missing or nonsense, so games saved before stages existed still load with their balls.
+- `restoreGame(saved)` — validates a save and defaults new fields: `stage` to 0 when it's missing or nonsense, and `log` to the balls alone when it's missing or doesn't match them. Games saved by older versions always load with their balls.
 
 The auto speed is a per-browser setting stored separately, not part of the game.
 
@@ -115,6 +118,17 @@ A game plays for **1 line**, then **2 lines**, then **full house**. The stage is
 - After a result: **Check another** keeps the stage, for shared wins. **Next stage** is offered after a win. After a full house, **New game** is offered (still behind the usual confirmation) but never forced.
 
 The checker trusts the caller to type a real ticket line; it doesn't validate 90-ball ticket structure (column ranges, blanks). That would reject typos less clearly than it helps.
+
+### Game history (`history.js`)
+
+For settling a dispute: "when did 61 come out?", "was that line already complete?", "did we move to 2 lines before or after that ball?". The board shows *what* was called, not the order or what happened around it.
+
+- **An append-only log in the game state**: `{ type: 'ball', ball }`, `{ type: 'undo', ball }`, `{ type: 'stage', stage }` and `{ type: 'claim', stage, lines, won, missing, completedBy, ballsAgo }`. `draw`, `undo`, `setStage` and `recordClaim` in `game.js` append to it, so the log can't drift from the game. An undo is an event, not an erasure: the record shows what really happened.
+- **Loading** (`restoreGame`): entries that make no sense are dropped, and the ball and undo entries are replayed against the sequence. If they don't come out as exactly the balls drawn (a save from before the log, or a damaged one), the log is rebuilt from the balls alone. A save is never rejected for its history.
+- **On screen** (`H`, or the "37 / 90 called" count, which doubles as the button and so costs no footer space): runs of balls as small chips with their place in the draw, interleaved with stage changes, claim checks (numbers and result) and undos. It scrolls inside the dialog, opens scrolled to the newest entry, and pauses auto like every dialog.
+- **Download**: `historyText` as a `.txt` named by local date and time, through a `Blob` and an `<a download>`. The clipboard was ruled out because it needs a secure context, and the app is often served over plain `http://` on the LAN.
+- **Current game only**: New game clears it, as before. Keeping past games was considered and left out for now; download first to keep a copy.
+- No per-ball clock times: the order is what settles a dispute, and timestamps would add to every draw in the save.
 
 ### Voice calling (`speech-text.js`, `voices.js`)
 
@@ -172,7 +186,7 @@ Layout:
 - Auto stops automatically when all 90 are drawn.
 - **Prize banner** across the top: "Playing for: 1 line", large enough to read on the TV, with **Check claim** and **Next stage** beside it. Keeping the prize controls together up there also keeps the footer to one row at 1280×720.
 - **New game** and **Undo** require confirmation in an in-page `<dialog>` (an accidental "New game" mid-session is the one catastrophic UX failure here). Cancel has focus by default, so a stray `Space` is harmless. A native `confirm()` would kick the browser out of fullscreen.
-- **Keyboard**: `Space` = release ball, `A` = toggle auto, `C` = check claim, `N` = next stage, `M` = voice, `F` = fullscreen. Useful with a clicker/presenter remote. `Space` always releases a ball even when a button has focus, so a child pressing it can't toggle something else by accident.
+- **Keyboard**: `Space` = release ball, `A` = toggle auto, `C` = check claim, `N` = next stage, `M` = voice, `H` = history, `F` = fullscreen. Useful with a clicker/presenter remote. `Space` always releases a ball even when a button has focus, so a child pressing it can't toggle something else by accident.
 - Fullscreen button (Fullscreen API) for TV use.
 - Accessibility: called state isn't conveyed by colour alone (bold + tick/strike style as well as green); `aria-live` region announces the current ball for screen readers.
 
@@ -205,10 +219,11 @@ environment:
 
 ## Testing
 
-- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). Stage moves stop at full house; old saves restore at 1 line. Claims: parsing and every validation message, win, not yet, complete-since. Spoken text: house call, two digits, tens, single digits, 90. Voices: network voices hidden, ordering, the Daniel default, the saved choice. Every dev scenario loads and does what its description says. The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
+- **Unit** (`node --test`): shuffle produces a permutation of 1..90; draw never repeats; draw past 90 is a no-op; undo reverses draw; derived views (last three etc.) are correct at the edges (0, 1, 2, 3, 90 drawn). Stage moves stop at full house; old saves restore at 1 line. Claims: parsing and every validation message, win, not yet, complete-since. Spoken text: house call, two digits, tens, single digits, 90. Voices: network voices hidden, ordering, the Daniel default, the saved choice. History: the log records balls, undos, stage changes and claims in order; bad entries are dropped and a mismatched log is rebuilt; the timeline and text export, including late wins and undos. Every dev scenario loads and does what its description says. The bundled `calls.json` is valid; the loader skips bad keys/values and treats a malformed file as empty.
 - **E2E** (Playwright): release ball updates main ball, last-3 and board; a ball with a call shows its phrase, a ball without one shows none (using a seeded sequence so the test knows which ball comes next); a missing `calls.json` doesn't break the game; auto mode draws on a timer (using Playwright's clock API so tests don't actually wait); speed change; custom speed range from `config.json`; fallback when it is missing; undo; new game confirmation; state survives reload; game ends cleanly at 90.
 - **Prizes** (Playwright): checking at each stage, a shared win (check another), a failed claim, validation errors, pasting, the `C` and `N` keys, picking a stage from the banner, the stage surviving a reload and resetting on a new game, a pre-stages save loading at 1 line.
 - **Voice** (Playwright, speech API stubbed with `page.addInitScript` so tests see what would be said): off by default and remembered when turned on; the right text for a house call and for traditional readings; network voices hidden, Daniel by default, a choice remembered; voices that load late; auto waiting for speech and the 8 s limit; undo, new game and pause cutting speech off; the last ball said in full; no controls without speech support.
+- **History** (Playwright): balls in order, opened by `H` or the count, pausing auto; claims, stage changes and undos where they happened; surviving a reload, scrolled to the newest entry; an old save showing its balls; a new game starting empty; the downloaded text file; a full game's history fitting at 1280×720.
 - **Dev scenarios** (Playwright, dev server only): picking a scenario loads its game; the dev server refuses paths outside `public/` and `dev/`.
 - **Hardening for the night** (Playwright): holding `Space` releases one ball; Cmd/Ctrl/Alt shortcuts are left to the browser; shortcuts are ignored while a dialog is open; opening a dialog pauses auto; the layout fits at 1920×1080, 1366×768 and 1280×720; fullscreen and cursor hiding; Wake Lock requested on the first ball and re-requested after loss (stubbed); blocked storage and unparseable saves don't break the game; the screen-reader announcement.
 - **Container only** (`BASE_URL` set): security headers, `/healthz`, rendered `config.json`, and no console or CSP errors during play.
@@ -231,7 +246,7 @@ All five phases are built.
 
 - An in-app editor for calls, so the caller can add new ones themselves. It would need somewhere to save them: `localStorage` for one browser, or a small backend for anything shared.
 - Separate **caller** and **display** views — same machine via `BroadcastChannel` (no backend), or across devices via a tiny WebSocket server.
-- Game history / export of the called sequence (useful for verifying a disputed claim).
+- Keep the last few games after New game (history is current-game only for now).
 - Configurable prize stages (e.g. corners, or a single "full house only" game) via `config.json`.
 
 ## Decisions
@@ -242,4 +257,5 @@ All five phases are built.
 - **Caller:** a child reads the numbers aloud; the house calls are shown under the current ball, stored as editable data in `calls.json`.
 - **Prizes:** 1 line → 2 lines → full house, moved on by hand only. Claims are typed one ticket line per row; a late claim is noted, not refused.
 - **Voice:** Web Speech API with local voices only, off by default, traditional reading unless `calls.json` has a call; auto waits for it (8 s limit).
+- **History:** an append-only log saved with the game, current game only, downloaded as plain text.
 - **Manual testing:** ready-made games on a dev-server-only `/dev/` page, shared with the Playwright tests, never shipped in the image.

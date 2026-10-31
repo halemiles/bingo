@@ -624,6 +624,101 @@ kbd {
   font-weight: 700;
 }
 
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+}
+
+.history .dialog__message {
+  margin-bottom: 0;
+}
+
+.history__summary {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* Scrolls inside the dialog, so a 90-ball game still fits a 720p screen. */
+.history__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 0.6em;
+  border-radius: 0.5em;
+  background: var(--bg);
+}
+
+.history__balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The ball number, with its place in the draw in small type above it. */
+.history__ball {
+  display: grid;
+  place-items: center;
+  min-width: 2.6em;
+  padding: 0.15em 0.3em 0.25em;
+  border-radius: 0.4em;
+  background: var(--surface-raised);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.history__ball::before {
+  content: attr(data-position);
+  color: var(--text-dim);
+  font-size: 0.65em;
+  font-weight: 400;
+}
+
+.history__event {
+  padding: 0.4em 0.7em;
+  border-left: 0.25em solid var(--text-faint);
+}
+
+.history__event p {
+  margin: 0;
+}
+
+.history__event--stage {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.history__event--claim {
+  border-color: var(--accent);
+}
+
+.history__event--claim.is-win {
+  border-color: var(--called);
+}
+
+.history__event--undo {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.history__numbers {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  word-spacing: 0.3em;
+}
+
+.history__empty {
+  margin: 0;
+  color: var(--text-dim);
+}
+
 .chip.is-missing {
   border: 0.12em dashed var(--text-dim);
   color: var(--text-dim);
