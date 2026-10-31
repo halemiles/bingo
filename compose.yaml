@@ -1,0 +1,31 @@
+services:
+  bingo:
+    build: .
+    image: bingo:local
+    container_name: bingo
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+
+    # Auto-mode speed slider: range and starting point, in whole seconds.
+    # Checked at startup; the container refuses to start on bad values.
+    environment:
+      AUTO_MIN_SECONDS: 3
+      AUTO_MAX_SECONDS: 15
+      AUTO_DEFAULT_SECONDS: 5
+      AUTO_STEP_SECONDS: 1
+
+    # The house bingo calls. Mounting the directory (not the single file)
+    # means edits show up on a browser refresh even when an editor saves by
+    # replacing the file. Remove this to use the copy baked into the image.
+    volumes:
+      - ./public/data:/usr/share/nginx/html/data:ro
+
+    # Hardening: nothing in here needs to write anywhere except /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

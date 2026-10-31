@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bingo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="balls" aria-label="Balls">
+        <div class="current">
+          <div id="current-ball" class="ball ball--current" data-testid="current-ball">
+            <span class="ball__face"><span class="ball__number" id="current-number"></span></span>
+          </div>
+          <p id="current-call" class="call" data-testid="current-call"></p>
+        </div>
+
+        <div class="recent">
+          <h2 class="label">Last 3 balls</h2>
+          <ol id="recent-balls" class="recent__list" data-testid="recent-balls"></ol>
+        </div>
+      </section>
+
+      <section class="board-wrap" aria-label="Board">
+        <ol id="board" class="board" data-testid="board"></ol>
+      </section>
+    </main>
+
+    <footer class="controls">
+      <button id="release" class="btn btn--primary" type="button">
+        Release ball <kbd>Space</kbd>
+      </button>
+      <button id="auto" class="btn" type="button" aria-pressed="false">
+        <span id="auto-label">Auto</span> <kbd>A</kbd>
+      </button>
+
+      <label class="speed">
+        <span>Every</span>
+        <input id="speed" type="range" min="3" max="15" step="1" value="5" />
+        <output id="speed-value" for="speed">5s</output>
+      </label>
+
+      <div id="countdown" class="countdown" data-testid="countdown" hidden>
+        <div class="countdown__track"><div class="countdown__bar"></div></div>
+        <span id="countdown-text"></span>
+      </div>
+
+      <span id="count" class="count" data-testid="count"></span>
+
+      <span class="spacer"></span>
+
+      <button id="undo" class="btn btn--quiet" type="button">Undo</button>
+      <button id="new-game" class="btn btn--quiet" type="button">New game</button>
+      <button id="fullscreen" class="btn btn--quiet" type="button">
+        <span id="fullscreen-label">Fullscreen</span> <kbd>F</kbd>
+      </button>
+    </footer>
+
+    <div id="announcer" class="visually-hidden" aria-live="assertive" aria-atomic="true"></div>
+
+    <dialog id="confirm" class="dialog" aria-labelledby="confirm-message">
+      <form method="dialog">
+        <p id="confirm-message" class="dialog__message"></p>
+        <div class="dialog__actions">
+          <button id="confirm-cancel" class="btn" value="cancel">Cancel</button>
+          <button id="confirm-ok" class="btn btn--danger" value="ok">OK</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
