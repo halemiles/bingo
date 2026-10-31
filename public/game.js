@@ -8,6 +8,15 @@
 export const TOTAL_BALLS = 90;
 export const RECENT_COUNT = 3;
 
+// The prizes a game plays for, in order. `lines` is how many ticket lines a
+// claim at that stage covers. The game never advances on its own: several
+// people can win on the same ball, so the caller moves on.
+export const STAGES = Object.freeze([
+  Object.freeze({ name: '1 line', lines: 1 }),
+  Object.freeze({ name: '2 lines', lines: 2 }),
+  Object.freeze({ name: 'Full house', lines: 3 }),
+]);
+
 // Uniform random integer in [0, maxExclusive) from the platform CSPRNG.
 // Rejection sampling avoids the modulo bias of `random % max`.
 export function secureRandomInt(maxExclusive) {
@@ -33,7 +42,7 @@ export function shuffledBalls(randomInt = secureRandomInt) {
 }
 
 export function newGame(randomInt = secureRandomInt) {
-  return { sequence: shuffledBalls(randomInt), drawnCount: 0 };
+  return { sequence: shuffledBalls(randomInt), drawnCount: 0, stage: 0 };
 }
 
 export function draw(state) {
@@ -44,6 +53,23 @@ export function draw(state) {
 export function undo(state) {
   if (state.drawnCount === 0) return state;
   return { ...state, drawnCount: state.drawnCount - 1 };
+}
+
+export function isValidStage(stage) {
+  return Number.isInteger(stage) && stage >= 0 && stage < STAGES.length;
+}
+
+export function setStage(state, stage) {
+  if (!isValidStage(stage) || stage === state.stage) return state;
+  return { ...state, stage };
+}
+
+export function isLastStage(state) {
+  return state.stage === STAGES.length - 1;
+}
+
+export function nextStage(state) {
+  return isLastStage(state) ? state : setStage(state, state.stage + 1);
 }
 
 export function isFinished(state) {
@@ -67,6 +93,7 @@ export function calledBalls(state) {
 
 // Guards state loaded from storage: anything that isn't a full permutation
 // of 1..90 with a sane drawnCount is rejected rather than half-trusted.
+// The stage isn't checked here; restoreGame defaults it.
 export function isValidState(value) {
   if (!value || typeof value !== 'object') return false;
   const { sequence, drawnCount } = value;
@@ -78,4 +105,13 @@ export function isValidState(value) {
     seen.add(n);
   }
   return true;
+}
+
+// Turns a saved game back into state, or null if it can't be trusted.
+// Games saved before stages existed (or with a stage that makes no sense)
+// keep their balls and start at the first stage, rather than being lost.
+export function restoreGame(value) {
+  if (!isValidState(value)) return null;
+  const { sequence, drawnCount, stage } = value;
+  return { sequence, drawnCount, stage: isValidStage(stage) ? stage : 0 };
 }

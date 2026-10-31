@@ -1,7 +1,18 @@
 // The TV setup: everything fits without scrolling, fullscreen, cursor
 // hiding, keeping the screen awake, and surviving blocked storage.
 import { test, expect } from './fixtures.js';
-import { open, openWithGame, sequenceStartingWith, ui } from './helpers.js';
+import { open, openWithGame, sequenceStartingWith, ui, claim, checkClaim } from './helpers.js';
+
+async function expectOnScreen(locators, viewport) {
+  for (const locator of locators) {
+    const box = await locator.boundingBox();
+    expect(box, 'element is rendered').not.toBeNull();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  }
+}
 
 for (const viewport of [
   { width: 1920, height: 1080 },
@@ -10,16 +21,36 @@ for (const viewport of [
 ]) {
   test(`everything fits on a ${viewport.width}x${viewport.height} screen`, async ({ page }) => {
     await page.setViewportSize(viewport);
-    await openWithGame(page, sequenceStartingWith(88, 47, 12, 3), 4);
+    // Full house is the longest banner.
+    await openWithGame(page, sequenceStartingWith(88, 47, 12, 3), 4, { stage: 2 });
     const $ = ui(page);
-    for (const locator of [$.currentBall, $.currentCall, $.recent.last(), $.cell(1), $.cell(90), $.release, $.newGame]) {
-      const box = await locator.boundingBox();
-      expect(box, 'element is rendered').not.toBeNull();
-      expect(box.x).toBeGreaterThanOrEqual(0);
-      expect(box.y).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
-    }
+    await expectOnScreen(
+      [$.stageBanner, $.check, $.nextStage, $.currentBall, $.currentCall, $.recent.last(), $.cell(1), $.cell(90), $.release, $.newGame],
+      viewport,
+    );
+    // The banner sits above the game, clear of the board.
+    const banner = await $.stageBanner.boundingBox();
+    expect(banner.y + banner.height).toBeLessThanOrEqual((await $.cell(1).boundingBox()).y);
+  });
+
+  test(`a full house claim fits on a ${viewport.width}x${viewport.height} screen`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    const ticket = [
+      [1, 12, 23, 34, 45],
+      [2, 13, 24, 35, 46],
+      [3, 14, 25, 36, 47],
+    ];
+    await openWithGame(page, sequenceStartingWith(...ticket.flat()), 15, { stage: 2 });
+    const $ = await checkClaim(page, ticket);
+    await expect($.verdict).toHaveText('Full house! 🎉');
+    await expectOnScreen([$.verdict, $.called.last(), $.close, $.newGame], viewport);
+
+    // The entry box with every validation error showing fits too.
+    await $.again.click();
+    await claim(page).input.fill('1 2 3 4\n5 5 6 7 8 9\n0 91 x');
+    await claim(page).submit.click();
+    await expect(claim(page).errors).not.toHaveCount(0);
+    await expectOnScreen([claim(page).input, claim(page).errors.last(), claim(page).submit], viewport);
   });
 }
 

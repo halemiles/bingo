@@ -16,11 +16,13 @@ export async function open(page) {
 }
 
 // Loads the app with a fixed draw order so tests know which ball is next.
-export async function openWithGame(page, sequence, drawnCount = 0) {
+// `extra` adds saved fields such as `{ stage: 1 }`; without it the save has
+// no stage, like a game saved before prize stages existed.
+export async function openWithGame(page, sequence, drawnCount = 0, extra = {}) {
   await open(page);
   await page.evaluate(([key, value]) => localStorage.setItem(key, JSON.stringify(value)), [
     GAME_KEY,
-    { sequence, drawnCount },
+    { sequence, drawnCount, ...extra },
   ]);
   await page.reload();
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
@@ -42,7 +44,42 @@ export function ui(page) {
     undo: page.getByRole('button', { name: 'Undo' }),
     newGame: page.getByRole('button', { name: 'New game' }),
     dialog: page.getByRole('dialog'),
+    stageBanner: page.getByTestId('stage-banner'),
+    stagePicker: page.getByTestId('stage-picker'),
+    nextStage: page.locator('#next-stage'),
+    check: page.locator('#check'),
   };
+}
+
+// The claim checker dialog.
+export function claim(page) {
+  const dialog = page.getByTestId('claim');
+  return {
+    dialog,
+    title: dialog.getByRole('heading'),
+    input: dialog.getByRole('textbox'),
+    submit: dialog.getByRole('button', { name: 'Check', exact: true }),
+    cancel: dialog.getByRole('button', { name: 'Cancel' }),
+    errors: dialog.getByRole('alert').locator('li'),
+    verdict: page.getByTestId('claim-verdict'),
+    note: page.getByTestId('claim-note'),
+    lines: page.getByTestId('claim-lines').locator('ol'),
+    called: page.getByTestId('claim-lines').locator('li.is-called'),
+    missing: page.getByTestId('claim-lines').locator('li.is-missing'),
+    again: dialog.getByRole('button', { name: 'Check another' }),
+    next: dialog.getByRole('button', { name: 'Next stage' }),
+    newGame: dialog.getByRole('button', { name: 'New game' }),
+    close: dialog.getByRole('button', { name: 'Close' }),
+  };
+}
+
+// Opens the claim checker, enters the lines and checks them.
+export async function checkClaim(page, lines) {
+  const $ = claim(page);
+  if (!(await $.dialog.isVisible())) await ui(page).check.click();
+  await $.input.fill(lines.map((line) => line.join(' ')).join('\n'));
+  await $.submit.click();
+  return $;
 }
 
 export async function expectRecent(page, numbers) {

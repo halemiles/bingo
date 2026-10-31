@@ -11,8 +11,13 @@ import {
   currentBall,
   recentBalls,
   calledBalls,
-  isValidState,
+  STAGES,
+  setStage,
+  nextStage,
+  isLastStage,
+  restoreGame,
 } from './game.js';
+import { NUMBERS_PER_LINE, parseClaim, checkClaim, describeResult } from './claims.js';
 import { loadCalls } from './calls.js';
 import { loadConfig, clampSpeed } from './config.js';
 
@@ -21,10 +26,16 @@ const STORAGE_KEYS = {
   speed: 'bingo.speedSeconds.v1',
 };
 const CURSOR_HIDE_MS = 3000;
+// Shown greyed out in an empty claim box, one made-up ticket line per row.
+const EXAMPLE_LINES = ['4 23 45 61 88', '7 19 32 50 77', '2 16 38 64 81'];
 const COUNTDOWN_REFRESH_MS = 100;
 
 const $ = (id) => document.getElementById(id);
 const el = {
+  stageBanner: $('stage-banner'),
+  stageName: $('stage-name'),
+  nextStage: $('next-stage'),
+  check: $('check'),
   currentBall: $('current-ball'),
   currentNumber: $('current-number'),
   currentCall: $('current-call'),
@@ -47,6 +58,24 @@ const el = {
   confirmMessage: $('confirm-message'),
   confirmOk: $('confirm-ok'),
   confirmCancel: $('confirm-cancel'),
+  stagePicker: $('stage-picker'),
+  stageOptions: $('stage-options'),
+  claim: $('claim'),
+  claimForm: $('claim-form'),
+  claimTitle: $('claim-title'),
+  claimEntry: $('claim-entry'),
+  claimHint: $('claim-hint'),
+  claimNumbers: $('claim-numbers'),
+  claimErrors: $('claim-errors'),
+  claimCancel: $('claim-cancel'),
+  claimResult: $('claim-result'),
+  claimVerdict: $('claim-verdict'),
+  claimNote: $('claim-note'),
+  claimLines: $('claim-lines'),
+  claimClose: $('claim-close'),
+  claimAgain: $('claim-again'),
+  claimNext: $('claim-next'),
+  claimNewGame: $('claim-new-game'),
 };
 
 let state;
@@ -73,8 +102,7 @@ function writeStorage(key, value) {
 }
 
 function loadGame() {
-  const saved = readStorage(STORAGE_KEYS.game);
-  return isValidState(saved) ? saved : newGame();
+  return restoreGame(readStorage(STORAGE_KEYS.game)) ?? newGame();
 }
 
 // ---------- Rendering ----------
@@ -117,6 +145,17 @@ function buildRecent() {
   el.recentList.replaceChildren(fragment);
 }
 
+function buildStagePicker() {
+  const buttons = STAGES.map(({ name }, i) => {
+    const button = document.createElement('button');
+    button.className = 'btn stage-option';
+    button.value = String(i);
+    button.textContent = name;
+    return button;
+  });
+  el.stageOptions.replaceChildren(...buttons);
+}
+
 function render() {
   const current = currentBall(state);
   const recent = recentBalls(state);
@@ -145,6 +184,9 @@ function render() {
     cell.setAttribute('aria-label', isCalled ? `${n}, called` : String(n));
   }
 
+  el.stageName.textContent = STAGES[state.stage].name;
+  el.nextStage.disabled = isLastStage(state);
+
   el.count.textContent = finished ? `All ${TOTAL_BALLS} called` : `${state.drawnCount} / ${TOTAL_BALLS} called`;
   el.release.disabled = finished;
   el.auto.disabled = finished;
@@ -152,11 +194,11 @@ function render() {
   el.newGame.disabled = state.drawnCount === 0;
 }
 
-function animateNewBall() {
-  // Restart the CSS animation by removing the class and forcing a reflow.
-  el.currentBall.classList.remove('pop');
-  void el.currentBall.offsetWidth;
-  el.currentBall.classList.add('pop');
+function restartAnimation(element, className) {
+  // Removing the class and forcing a reflow lets the animation play again.
+  element.classList.remove(className);
+  void element.offsetWidth;
+  element.classList.add(className);
 }
 
 function announce() {
@@ -178,7 +220,7 @@ function releaseBall() {
   if (isFinished(state)) return;
   keepScreenAwake();
   setState(draw(state));
-  animateNewBall();
+  restartAnimation(el.currentBall, 'pop');
   announce();
   if (auto.running) {
     if (isFinished(state)) stopAuto();
@@ -201,6 +243,123 @@ async function startNewGame() {
   if (await confirmAction('Start a new game? All called balls will be cleared.', 'New game')) {
     setState(newGame());
   }
+}
+
+// ---------- Prize stages ----------
+
+function changeStage(next) {
+  if (next === state) return;
+  setState(next);
+  restartAnimation(el.stageBanner, 'flash');
+  el.announcer.textContent = `Now playing for ${STAGES[state.stage].name}`;
+}
+
+// Never automatic: several people can win on the same ball.
+function advanceStage() {
+  changeStage(nextStage(state));
+}
+
+// Clicking the banner picks a stage directly, to fix a mistake.
+async function pickStage() {
+  stopAuto();
+  const buttons = [...el.stageOptions.children];
+  buttons.forEach((button, i) => button.setAttribute('aria-pressed', String(i === state.stage)));
+  const choice = await showDialog(el.stagePicker, buttons[state.stage]);
+  if (choice !== 'cancel' && choice !== '') changeStage(setStage(state, Number(choice)));
+}
+
+// ---------- Checking a claim ----------
+
+function openClaim() {
+  stopAuto();
+  showDialog(el.claim, el.claimNumbers);
+  showClaimEntry();
+}
+
+function showClaimEntry() {
+  const { name, lines } = STAGES[state.stage];
+  el.claimTitle.textContent = `Check a claim: ${name}`;
+  el.claimHint.textContent =
+    lines === 1
+      ? `Type or paste the ${NUMBERS_PER_LINE} numbers of the line.`
+      : `Type or paste the ${lines * NUMBERS_PER_LINE} numbers, one ticket line per line of text.`;
+  el.claimNumbers.rows = lines;
+  el.claimNumbers.placeholder = EXAMPLE_LINES.slice(0, lines).join('\n');
+  el.claimNumbers.value = '';
+  showClaimErrors([]);
+  el.claimResult.hidden = true;
+  el.claimEntry.hidden = false;
+  el.claimNumbers.focus();
+}
+
+function showClaimErrors(errors) {
+  el.claimErrors.replaceChildren(
+    ...errors.map((message) => {
+      const item = document.createElement('li');
+      item.textContent = message;
+      return item;
+    }),
+  );
+  if (errors.length) el.claimNumbers.setAttribute('aria-invalid', 'true');
+  else el.claimNumbers.removeAttribute('aria-invalid');
+}
+
+function submitClaim(event) {
+  event.preventDefault();
+  const { lines, errors } = parseClaim(el.claimNumbers.value, STAGES[state.stage].lines);
+  if (errors.length) {
+    showClaimErrors(errors);
+    el.claimNumbers.focus();
+  } else {
+    showClaimResult(lines);
+  }
+}
+
+function showClaimResult(lines) {
+  const result = checkClaim(lines, state);
+  const { title, note } = describeResult(result, state.stage);
+  el.claimVerdict.textContent = title;
+  el.claimVerdict.classList.toggle('is-win', result.won);
+  el.claimNote.textContent = note;
+  el.claimNote.hidden = note === '';
+
+  const missing = new Set(result.missing);
+  el.claimLines.replaceChildren(
+    ...lines.map((line) => {
+      const row = document.createElement('ol');
+      row.className = 'claim__line';
+      for (const n of line) {
+        const isCalled = !missing.has(n);
+        const chip = document.createElement('li');
+        chip.className = `chip ${isCalled ? 'is-called' : 'is-missing'}`;
+        chip.textContent = String(n);
+        chip.setAttribute('aria-label', isCalled ? `${n}, called` : `${n}, not called`);
+        row.append(chip);
+      }
+      return row;
+    }),
+  );
+
+  // Next stage only after a win, and a new game only after the full house;
+  // neither is forced, so a shared win can be checked first.
+  el.claimNext.hidden = !result.won || isLastStage(state);
+  el.claimNewGame.hidden = !result.won || !isLastStage(state);
+  el.claimEntry.hidden = true;
+  el.claimResult.hidden = false;
+  el.claimAgain.focus();
+}
+
+function onClaimKeyDown(event) {
+  // Enter starts a new line, so Ctrl+Enter (Cmd+Enter on a Mac) checks.
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    el.claimForm.requestSubmit();
+  }
+}
+
+function closeClaimThen(action) {
+  el.claim.close();
+  action();
 }
 
 // ---------- Auto mode ----------
@@ -258,18 +417,28 @@ function setSpeed(seconds, { save = true } = {}) {
   // A new speed applies from the next ball; the current countdown finishes as is.
 }
 
-// ---------- Confirm dialog ----------
+// ---------- Dialogs ----------
 
-function confirmAction(message, okLabel) {
+// Opens a modal <dialog> and resolves with its returnValue when it closes.
+// A native confirm() would kick the browser out of fullscreen.
+function showDialog(dialog, focusTarget) {
   return new Promise((resolve) => {
-    el.confirmMessage.textContent = message;
-    el.confirmOk.textContent = okLabel;
-    el.confirm.returnValue = '';
-    el.confirm.addEventListener('close', () => resolve(el.confirm.returnValue === 'ok'), { once: true });
-    el.confirm.showModal();
-    // Default to the safe choice so a stray Space or Enter cancels.
-    el.confirmCancel.focus();
+    dialog.returnValue = '';
+    dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true });
+    dialog.showModal();
+    focusTarget.focus();
   });
+}
+
+function isDialogOpen() {
+  return document.querySelector('dialog[open]') !== null;
+}
+
+async function confirmAction(message, okLabel) {
+  el.confirmMessage.textContent = message;
+  el.confirmOk.textContent = okLabel;
+  // Default to the safe choice so a stray Space or Enter cancels.
+  return (await showDialog(el.confirm, el.confirmCancel)) === 'ok';
 }
 
 // ---------- Fullscreen, wake lock, cursor ----------
@@ -312,12 +481,18 @@ function updateCursor() {
 
 // ---------- Input ----------
 
+// A text field counts only while it's showing. Focus stays on the claim box
+// for a moment after its dialog closes, and Space then should release a ball.
 function isTypingTarget(target) {
-  return target instanceof HTMLElement && target.matches('input:not([type="range"]), textarea, select');
+  return (
+    target instanceof HTMLElement &&
+    target.matches('input:not([type="range"]), textarea, select') &&
+    !target.closest('dialog:not([open])')
+  );
 }
 
 function onKeyDown(event) {
-  if (el.confirm.open || event.ctrlKey || event.metaKey || event.altKey || isTypingTarget(event.target)) return;
+  if (isDialogOpen() || event.ctrlKey || event.metaKey || event.altKey || isTypingTarget(event.target)) return;
 
   if (event.code === 'Space') {
     // Always "release ball", even if a button has focus, so a child pressing
@@ -327,14 +502,16 @@ function onKeyDown(event) {
     return;
   }
   if (event.repeat) return;
-  const key = event.key.toLowerCase();
-  if (key === 'a') toggleAuto();
-  else if (key === 'f') toggleFullscreen();
+  const action = { a: toggleAuto, f: toggleFullscreen, c: openClaim, n: advanceStage }[event.key.toLowerCase()];
+  if (!action) return;
+  // Stops the C that opened the claim box being typed into it.
+  event.preventDefault();
+  action();
 }
 
 function onKeyUp(event) {
   // Buttons activate on Space keyup; swallow it so a focused button doesn't fire too.
-  if (event.code === 'Space' && !el.confirm.open && !isTypingTarget(event.target)) event.preventDefault();
+  if (event.code === 'Space' && !isDialogOpen() && !isTypingTarget(event.target)) event.preventDefault();
 }
 
 function bindEvents() {
@@ -344,6 +521,17 @@ function bindEvents() {
   el.newGame.addEventListener('click', startNewGame);
   el.fullscreen.addEventListener('click', toggleFullscreen);
   el.speed.addEventListener('input', () => setSpeed(Number(el.speed.value)));
+  el.stageBanner.addEventListener('click', pickStage);
+  el.nextStage.addEventListener('click', advanceStage);
+  el.check.addEventListener('click', openClaim);
+
+  el.claimForm.addEventListener('submit', submitClaim);
+  el.claimNumbers.addEventListener('keydown', onClaimKeyDown);
+  el.claimCancel.addEventListener('click', () => el.claim.close());
+  el.claimClose.addEventListener('click', () => el.claim.close());
+  el.claimAgain.addEventListener('click', showClaimEntry);
+  el.claimNext.addEventListener('click', () => closeClaimThen(advanceStage));
+  el.claimNewGame.addEventListener('click', () => closeClaimThen(startNewGame));
 
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('keyup', onKeyUp);
@@ -366,6 +554,7 @@ async function init() {
 
   buildBoard();
   buildRecent();
+  buildStagePicker();
   // Auto mode is never restored: after a reload it waits for the caller.
   setState(loadGame());
   renderAuto();

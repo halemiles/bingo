@@ -12,10 +12,15 @@ import {
   recentBalls,
   calledBalls,
   isValidState,
+  STAGES,
+  setStage,
+  nextStage,
+  isLastStage,
+  restoreGame,
 } from '../../public/game.js';
 
 const oneToNinety = Array.from({ length: TOTAL_BALLS }, (_, i) => i + 1);
-const inOrder = () => ({ sequence: [...oneToNinety], drawnCount: 0 });
+const inOrder = () => ({ sequence: [...oneToNinety], drawnCount: 0, stage: 0 });
 const drawN = (state, n) => {
   for (let i = 0; i < n; i++) state = draw(state);
   return state;
@@ -46,9 +51,10 @@ test('shuffledBalls uses the injected random source', () => {
   assert.deepEqual(shuffledBalls(() => 0), shuffledBalls(() => 0));
 });
 
-test('newGame starts with nothing drawn', () => {
+test('newGame starts with nothing drawn, playing for 1 line', () => {
   const state = newGame();
   assert.equal(state.drawnCount, 0);
+  assert.equal(state.stage, 0);
   assert.equal(currentBall(state), null);
   assert.deepEqual(recentBalls(state), []);
   assert.equal(calledBalls(state).size, 0);
@@ -123,4 +129,76 @@ test('isValidState rejects anything that is not a permutation with a sane count'
   ];
   for (const value of bad) assert.equal(isValidState(value), false, JSON.stringify(value));
   assert.ok(isValidState({ sequence: oneToNinety, drawnCount: 90 }));
+});
+
+test('the stages are 1 line, 2 lines, then full house', () => {
+  assert.deepEqual(
+    STAGES.map(({ name, lines }) => [name, lines]),
+    [
+      ['1 line', 1],
+      ['2 lines', 2],
+      ['Full house', 3],
+    ],
+  );
+});
+
+test('nextStage moves through the stages and stops at full house', () => {
+  let state = inOrder();
+  assert.equal(isLastStage(state), false);
+  state = nextStage(state);
+  assert.equal(state.stage, 1);
+  state = nextStage(state);
+  assert.equal(state.stage, 2);
+  assert.ok(isLastStage(state));
+  assert.equal(nextStage(state), state);
+});
+
+test('stage moves keep the balls and do not mutate the previous state', () => {
+  const before = drawN(inOrder(), 7);
+  const after = nextStage(before);
+  assert.equal(before.stage, 0);
+  assert.equal(after.drawnCount, 7);
+  assert.equal(after.sequence, before.sequence);
+});
+
+test('draw and undo keep the stage', () => {
+  const state = nextStage(drawN(inOrder(), 3));
+  assert.equal(draw(state).stage, 1);
+  assert.equal(undo(state).stage, 1);
+});
+
+test('setStage picks a stage directly, ignoring anything out of range', () => {
+  const state = inOrder();
+  assert.equal(setStage(state, 2).stage, 2);
+  assert.equal(setStage(setStage(state, 2), 0).stage, 0);
+  assert.equal(setStage(state, 0), state);
+  for (const bad of [-1, 3, 1.5, '1', null]) assert.equal(setStage(state, bad), state, String(bad));
+});
+
+test('restoreGame keeps a saved stage', () => {
+  const saved = { sequence: oneToNinety, drawnCount: 12, stage: 2 };
+  assert.deepEqual(restoreGame(saved), saved);
+});
+
+test('restoreGame loads a game saved before stages existed at 1 line', () => {
+  const restored = restoreGame({ sequence: oneToNinety, drawnCount: 12 });
+  assert.deepEqual(restored, { sequence: oneToNinety, drawnCount: 12, stage: 0 });
+});
+
+test('restoreGame keeps the balls when the saved stage makes no sense', () => {
+  for (const stage of [-1, 3, 'Full house', null, 0.5]) {
+    const restored = restoreGame({ sequence: oneToNinety, drawnCount: 4, stage });
+    assert.equal(restored.stage, 0, String(stage));
+    assert.equal(restored.drawnCount, 4);
+  }
+});
+
+test('restoreGame rejects a save that is not a valid game, and drops unknown fields', () => {
+  assert.equal(restoreGame({ sequence: [1, 2, 3], drawnCount: 0 }), null);
+  assert.equal(restoreGame(null), null);
+  assert.deepEqual(Object.keys(restoreGame({ sequence: oneToNinety, drawnCount: 0, extra: 1 })), [
+    'sequence',
+    'drawnCount',
+    'stage',
+  ]);
 });
