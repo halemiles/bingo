@@ -31,7 +31,19 @@ jobs:
       - run: npm ci
       - name: Unit tests (with coverage thresholds)
         run: npm run test:unit:coverage
-      - run: npx playwright install --with-deps chromium firefox
+      # The browsers are cached by lockfile hash (@playwright/test is the only
+      # dependency, and each version pins its browser builds), so most runs
+      # skip the download. --with-deps still installs the system libraries;
+      # the browsers are found in the cache and skipped. One slow runner once
+      # took 9 minutes here, so the step gets its own limit: a stalled install
+      # fails under its own name instead of eating the job's test time.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright browsers
+        timeout-minutes: 6
+        run: npx playwright install --with-deps chromium firefox
       - run: npm run test:e2e
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
@@ -75,7 +87,14 @@ jobs:
           exit 1
 
       - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox
+      # Cached and time-limited as in the test job above.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright browsers
+        timeout-minutes: 6
+        run: npx playwright install --with-deps chromium firefox
       - name: e2e against the container
         run: npm run test:e2e
         env:

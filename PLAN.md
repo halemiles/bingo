@@ -232,7 +232,7 @@ environment:
 - **Browsers**: every Playwright test runs in Chromium and Firefox, the browser used on the night.
 - **Coverage**: unit tests hold the logic modules at 100% lines (enforced in CI); Playwright covers 100% of `app.js` lines (`npm run test:e2e:coverage`, a zero-dependency V8 coverage report).
 - **Entrypoint** (`node:test` running the script with `sh`): defaults, custom values, leading zeros, and each kind of bad value fails with a clear message.
-- **CI**: GitHub Actions with two jobs. One runs unit tests with coverage thresholds, then Playwright against the dev server. The other builds the image, checks a bad config stops the container, runs it hardened, and runs the same Playwright suite against it. Actions are pinned to commit SHAs.
+- **CI**: GitHub Actions with two jobs. One runs unit tests with coverage thresholds, then Playwright against the dev server. The other builds the image, checks a bad config stops the container, runs it hardened, and runs the same Playwright suite against it. Actions are pinned to commit SHAs. Both jobs cache the Playwright browsers (`~/.cache/ms-playwright`, keyed on the lockfile) and give the install step its own 6-minute limit, after a slow runner once spent 9 of the job's 15 minutes downloading them.
 
 ## Delivery phases
 
